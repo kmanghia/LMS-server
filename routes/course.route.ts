@@ -7,13 +7,10 @@ import {
   addReview,
   deleteCourse,
   editCourse,
-  generateVideoUrl,
-  generateVideoUrlMux,
   getAdminAllCourses,
   getAllCourses,
   getCourseByUser,
   getSingleCourse,
-  signedUrlVideoUrlMux,
   uploadCourse,
 } from "../controllers/course.controller";
 import { authorizeRoles, isAutheticated } from "../middleware/auth";
@@ -23,7 +20,7 @@ courseRouter.post(
   "/create-course",
   isAutheticated,
   authorizeRoles("admin"),
-  upload.fields([{ name: 'image' }, { name: 'demo' }, { name: 'videos' }]),
+  upload.fields([{ name: 'image' }, { name: 'demo' }, { name: 'videos' }]) as any,
   uploadCourse
 );
 
@@ -31,7 +28,7 @@ courseRouter.put(
   "/edit-course/:id",
   isAutheticated,
   authorizeRoles("admin"),
-  upload.fields([{ name: 'imageedit' }, { name: 'demoedit' }, { name: 'videos' }]),
+  upload.fields([{ name: 'imageedit' }, { name: 'demoedit' }, { name: 'videos' }]) as any,
   editCourse
 );
 
@@ -61,9 +58,6 @@ courseRouter.put(
   addReplyToReview
 );
 
-courseRouter.post("/getVdoCipherOTP", generateVideoUrl);
-courseRouter.get("/getMuxVideoOTP", generateVideoUrlMux);
-courseRouter.get("/signedUrlMuxVideo", signedUrlVideoUrlMux);
 courseRouter.delete(
   "/delete-course/:id",
   isAutheticated,

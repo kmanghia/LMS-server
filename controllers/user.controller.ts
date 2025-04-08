@@ -466,19 +466,48 @@ export const markChapterAsCompletedOfUser = CatchAsyncError(
       const id = req.user?._id;
       const chapterId = req.query.chapterId;
       const courseId = req.query.courseId;
+
+      console.log("User ID:", id);
+      console.log("Chapter ID:", chapterId); 
+      console.log("Course ID:", courseId);
+
       const user = await userModel.findById(id);
+      console.log("Found user:", user?._id);
+
       const progresses = user?.progress;
+      console.log("User progress:", progresses);
+
       const courseProgress = progresses?.find(item => item.courseId.toString() === courseId);
+      console.log("Course progress:", courseProgress);
+
       let chapterCourse = courseProgress?.chapters.find(item => item.chapterId.toString() === chapterId);
+      console.log("Chapter before update:", chapterCourse);
+
       if (chapterCourse) {
         chapterCourse.isCompleted = true;
+        console.log("Chapter after update:", chapterCourse);
+      } else {
+        // If chapter not found, add new chapter to course progress
+        if (courseProgress) {
+          courseProgress.chapters.push({
+            chapterId: chapterId as string,
+            isCompleted: true
+          });
+          console.log("Added new chapter:", courseProgress.chapters[courseProgress.chapters.length - 1]);
+        } else {
+          console.log("Course progress not found");
+        }
       }
+
       await user?.save();
+      console.log("User saved successfully");
+
       res.status(200).json({
         success: true,
         response: chapterCourse
       })
     } catch (error: any) {
+      console.error("Error in markChapterAsCompletedOfUser:", error);
       return next(new ErrorHandler(error.message, 400));
     }
   }

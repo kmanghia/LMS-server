@@ -44,7 +44,7 @@ userRouter.put("/update-user-info", isAutheticated, updateUserInfo);
 
 userRouter.put("/update-user-password", isAutheticated, updatePassword);
 
-userRouter.put("/update-user-avatar", isAutheticated, upload.single('avatar'), updateProfilePicture);
+userRouter.put("/update-user-avatar", isAutheticated, upload.single('avatar') as any, updateProfilePicture);
 
 userRouter.get(
   "/get-users",

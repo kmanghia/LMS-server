@@ -13,6 +13,7 @@ import NotificationModel from "../models/notification.Model";
 import axios from "axios";
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
+import userModel from "../models/user.model";
 
 export const uploadCourse = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -67,7 +68,8 @@ export const uploadCourse = CatchAsyncError(
 export const editCourse = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-
+      const user = await userModel.findById(req.user?._id);
+      console.log(req.user?._id)
       const files = req.files as {
         imageedit?: Express.Multer.File[];
         demoedit?: Express.Multer.File[];
@@ -76,58 +78,48 @@ export const editCourse = CatchAsyncError(
       const courseId = req.params.id;
       let videoIndex = 0;
       const coursedb = await CourseModel.findById(courseId) as any;
-      //file
+
+      if (!coursedb) {
+        return next(new ErrorHandler("Course not found", 404));
+      }
+
       const data = req.body;
       const image = files.imageedit?.[0];
       const demo = files.demoedit?.[0];
       const videos = files.videos || [];
 
-      // console.log('Request Body:', data);
       console.log('Uploaded Image 87:', image);
-      // console.log('Uploaded demo:', demo);
-      // console.log('Uploaded Video:', videos)
 
       const courses = JSON.parse(data.courseData);
-      // Xóa ảnh cũ nếu có ảnh mới được upload
-      console.log(coursedb.thumbnail.url)
+
       if (image && coursedb.thumbnail?.url) {
-        const oldImagePath = path.join(__dirname, '../uploads/images', coursedb.thumbnail.url);// tìm ảnh đã tồn tại
+        const oldImagePath = path.join(__dirname, '../uploads/images', coursedb.thumbnail.url);
         if (fs.existsSync(oldImagePath)) {
           fs.unlinkSync(oldImagePath);
           console.log('Đã xóa ảnh cũ:', oldImagePath);
-        }//update thumbnail: image + url
+        }
         courses.thumbnail = {
-          //public_id: image?.mimetype,
           url: image?.filename,
         };
       }
 
-      // Xóa demo c   nếu có demo mới được upload
-      console.log(coursedb.demoUrl)
       if (demo && coursedb.demoUrl) {
         const oldDemoPath = path.join(__dirname, '../uploads/videos', coursedb.demoUrl);
         if (fs.existsSync(oldDemoPath)) {
           fs.unlinkSync(oldDemoPath);
-          console.log('Đã xóa demo c  :', oldDemoPath);
+          console.log('Đã xóa demo cũ:', oldDemoPath);
         }
-        courses.demoUrl = demo.filename
+        courses.demoUrl = demo.filename;
       }
 
-      if (videos) {
-        // Tạo mảng videos mới chỉ chứa các phần tử có giá trị
-        const validVideos = videos.reduce((acc: Express.Multer.File[], video, index) => {
-          if (video) {
-            acc.push(video);
-          }
-          return acc;
-        }, []);
-        console.log(validVideos)
+      if (videos && videos.length > 0) {
+        const validVideos = videos.filter(video => video);
 
         if (courses.courseData && coursedb.courseData) {
           courses.courseData.forEach((content: any, index: number) => {
-            if (content.videoUrl === coursedb.courseData[index]._id.toString()) {
-              // Xóa video cũ nếu tồn tại
-              const oldVideoUrl = coursedb.courseData[index].videoUrl;
+            const courseDataItem = coursedb.courseData[index];
+            if (courseDataItem && content.videoUrl === courseDataItem._id?.toString()) {
+              const oldVideoUrl = courseDataItem.videoUrl;
               if (oldVideoUrl) {
                 const oldVideoPath = path.join(__dirname, '../uploads/videos', oldVideoUrl);
                 if (fs.existsSync(oldVideoPath)) {
@@ -135,13 +127,25 @@ export const editCourse = CatchAsyncError(
                   console.log('Đã xóa video cũ:', oldVideoPath);
                 }
               }
-              content.videoUrl = validVideos[videoIndex].filename
-              videoIndex++
+              if (validVideos[videoIndex]) {
+                content.videoUrl = validVideos[videoIndex].filename;
+                videoIndex++;
+              }
             }
-          })
+          });
         }
-
       }
+
+      // Giữ lại _id cho từng phần tử trong courseData
+      if (courses.courseData && coursedb.courseData) {
+        courses.courseData.forEach((content: any, index: number) => {
+          // Nếu có ID trong dữ liệu gốc và index hợp lệ, giữ nguyên ID đó
+          if (index < coursedb.courseData.length) {
+            content._id = coursedb.courseData[index]._id;
+          }
+        });
+      }
+
 
       const course = await CourseModel.findByIdAndUpdate(
         courseId,
@@ -150,6 +154,8 @@ export const editCourse = CatchAsyncError(
         },
         { new: true }
       );
+
+    
 
       res.status(201).json({
         success: true,
@@ -543,70 +549,3 @@ export const deleteCourse = CatchAsyncError(
 );
 
 
-export const generateVideoUrl = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { videoId } = req.body;
-      const response = await axios.post(
-     //vdoicipher hỗ trợ phát vídeo `https://dev.vdocipher.com/api/videos/${videoId}/otp`,
-        { ttl: 300 },
-        {
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Apisecret ${process.env.VDOCIPHER_API_SECRET}`,
-          },
-        }
-      );
-      res.json(response.data);
-    } catch (error: any) {
-      return next(new ErrorHandler(error.message, 400));
-    }
-  }
-);//Vdoicipher với url tạm gắn token tạm thời
-export const signedUrlVideoUrlMux = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { videoId } = req.query;
-
-      const secretKey = Buffer.from(process.env.MUX_SIGNING_KEY_SECRET as any, 'base64').toString("ascii")//chuyển đổi từ base64 sang buffer sau đó chuyển buffer thành chuỗi ASCII
-      const token = jwt.sign({ //header: thuật toán RS256, payload: sub - aud - exp - kid
-        sub: videoId as any, //id của video
-        aud: "v", //khối lượng mà token đc ph
-        exp: Math.floor(Date.now() / 1000) + (60 * 60), //thời gian hết hạn
-        kid: process.env.MUX_SIGNING_KEY_ID as any,
-      },
-        secretKey,
-        { algorithm: "RS256" }
-      )
-      return res.json({ token: token })
-    } catch (error: any) {
-      return next(new ErrorHandler(error.message, 400));
-    }
-  }
-);//Mux-Video 
-export const generateVideoUrlMux = CatchAsyncError(
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {// accesss token và refresh token
-      const username = "7c184250-2e20-4058-9879-95e0fa7271ec";
-      const password = "l8Z+yD9ELcme+EJfv5i++29yRSdDRsfOmpxielmYsoZVQJN2aR+9Zbm8RNHWPDVMWGFFGjpmidl";
-      const token = btoa(`${username}:${password}`);
-      const { videoId } = req.query;
-
-      let response =
-        await axios.get(
-         //kèm header  `https://api.mux.com/video/v1/assets/${videoId}`,
-          {
-            headers: {
-              Accept: "application/json",
-              "Content-Type": "application/json",
-              Authorization: `Basic ${token}`,
-            },
-          }
-        );
-      res.json(response.data);
-    } catch (error: any) {
-      return next(new ErrorHandler(error.message, 400));
-    }
-  }
-);
