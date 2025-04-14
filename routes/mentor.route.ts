@@ -9,7 +9,8 @@ import {
   reviewMentor, 
   getMentorCourses,
   getMentorById,
-  getMentorStudents
+  getMentorStudents,
+  getMentorStudentsByMentorId
 } from "../controllers/mentor.controller";
 
 const router = express.Router();
@@ -18,13 +19,13 @@ const router = express.Router();
 router.post("/register", registerAsMentor);
 
 // Lấy thông tin mentor
-router.get("/me-mentor", isAutheticated,authorizeRoles("mentor"), getMentorInfo);
+router.get("/me-mentor", isAutheticated, getMentorInfo);
 
 // Admin phê duyệt/từ chối mentor
 router.put("/update-status", isAutheticated, authorizeRoles("admin"), updateMentorStatus);
 
-// Admin lấy danh sách tất cả mentor
-router.get("/all", isAutheticated, authorizeRoles("admin"), getAllMentors);
+
+router.get("/all", isAutheticated, getAllMentors);
 
 // Admin lấy danh sách mentor đang chờ duyệt
 router.get("/pending", isAutheticated, authorizeRoles("admin"), getPendingMentors);
@@ -33,10 +34,13 @@ router.get("/pending", isAutheticated, authorizeRoles("admin"), getPendingMentor
 router.post("/review", isAutheticated, reviewMentor);
 
 // Lấy danh sách khóa học của mentor hiện tại
-router.get("/courses", isAutheticated, authorizeRoles("mentor"), getMentorCourses);
+router.get("/courses", isAutheticated, getMentorCourses);
 
 // Lấy danh sách học viên của mentor
-router.get("/students", isAutheticated, authorizeRoles("mentor"), getMentorStudents);
+router.get("/students", isAutheticated, getMentorStudents);
+
+// Lấy danh sách học viên của mentor theo mentorId
+router.get("/students/:mentorId", getMentorStudentsByMentorId);
 
 // Lấy thông tin chi tiết mentor theo ID
 router.get("/:id", getMentorById);
