@@ -362,6 +362,104 @@ export const getMentorCourses = CatchAsyncError(
   }
 );
 
+// Lấy danh sách học viên của mentor
+export const getMentorStudents = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?._id;
+      if (!userId) {
+        return next(new ErrorHandler("Vui lòng đăng nhập", 400));
+      }
+
+      // Tìm mentor ID từ user ID
+      const mentor = await MentorModel.findOne({ user: userId });
+      if (!mentor) {
+        return next(new ErrorHandler("Không tìm thấy thông tin mentor", 404));
+      }
+
+      // Lấy danh sách khóa học của mentor
+      const courses = await CourseModel.find({ mentor: mentor._id });
+      if (courses.length === 0) {
+        return res.status(200).json({
+          success: true,
+          students: []
+        });
+      }
+
+      // Lấy IDs của các khóa học
+      const courseIds = courses.map(course => course._id.toString());
+
+      // Lấy danh sách đơn hàng của các khóa học
+      const OrderModel = mongoose.model('Order');
+      const orders = await OrderModel.find({ courseId: { $in: courseIds } });
+
+      // Lấy danh sách user IDs từ các đơn hàng
+      const userIds = orders.map(order => order.userId);
+
+      // Lấy thông tin chi tiết của các học viên
+      const students = await userModel.find({ _id: { $in: userIds } }).select('name email avatar');
+
+      // Tạo danh sách học viên với thông tin khóa học
+      const studentsWithCourseInfo = [];
+      
+      for (const order of orders) {
+        const student = students.find(s => s._id.toString() === order.userId);
+        const course = courses.find(c => c._id.toString() === order.courseId);
+        
+        if (student && course) {
+          studentsWithCourseInfo.push({
+            _id: student._id,
+            name: student.name,
+            email: student.email,
+            avatar: student.avatar,
+            courseId: course._id,
+            courseName: course.name,
+            purchaseDate: order.createdAt,
+            price: course.price
+          });
+        }
+      }
+
+      // Loại bỏ các bản ghi trùng lặp (cùng một học viên mua nhiều khóa học)
+      const uniqueStudents = studentsWithCourseInfo.reduce((acc: any, current: any) => {
+        const isStudentAlreadyAdded = acc.find((item: any) => item._id.toString() === current._id.toString());
+        if (!isStudentAlreadyAdded) {
+          // Nếu học viên chưa có trong danh sách, thêm vào
+          acc.push({
+            _id: current._id,
+            name: current.name,
+            email: current.email,
+            avatar: current.avatar,
+            courses: [{
+              courseId: current.courseId,
+              courseName: current.courseName,
+              purchaseDate: current.purchaseDate,
+              price: current.price
+            }]
+          });
+        } else {
+          // Nếu học viên đã có trong danh sách, thêm khóa học vào mảng courses
+          const index = acc.findIndex((item: any) => item._id.toString() === current._id.toString());
+          acc[index].courses.push({
+            courseId: current.courseId,
+            courseName: current.courseName,
+            purchaseDate: current.purchaseDate,
+            price: current.price
+          });
+        }
+        return acc;
+      }, []);
+
+      res.status(200).json({
+        success: true,
+        students: uniqueStudents
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
 // Lấy chi tiết mentor theo ID
 export const getMentorById = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {

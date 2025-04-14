@@ -8,7 +8,8 @@ import {
   getPendingMentors, 
   reviewMentor, 
   getMentorCourses,
-  getMentorById
+  getMentorById,
+  getMentorStudents
 } from "../controllers/mentor.controller";
 
 const router = express.Router();
@@ -33,6 +34,9 @@ router.post("/review", isAutheticated, reviewMentor);
 
 // Lấy danh sách khóa học của mentor hiện tại
 router.get("/courses", isAutheticated, authorizeRoles("mentor"), getMentorCourses);
+
+// Lấy danh sách học viên của mentor
+router.get("/students", isAutheticated, authorizeRoles("mentor"), getMentorStudents);
 
 // Lấy thông tin chi tiết mentor theo ID
 router.get("/:id", getMentorById);
