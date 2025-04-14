@@ -55,6 +55,8 @@ export interface ICourse extends Document {
   courseData: ICourseData[];
   ratings?: number;
   purchased: number;
+  mentor: Schema.Types.ObjectId;
+  status: string;
 }
 
 const reviewSchema = new Schema<IReview>({
@@ -147,6 +149,15 @@ export const courseSchema = new Schema<ICourse>({
     type: Number,
     default: 0,
   },
+  mentor: {
+    type: Schema.Types.ObjectId,
+    ref: "Mentor"
+  },
+  status: {
+    type: String,
+    enum: ["draft", "pending", "active", "rejected"],
+    default: "draft"
+  }
 }, { timestamps: true });
 
 

@@ -201,7 +201,9 @@ export const getSingleCourse = CatchAsyncError(
 export const getAllCourses = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const courses = await CourseModel.find().select(
+      const isNext = req.query.isNext === "true" ? true : false;
+
+      const courses = await CourseModel.find({ status: "active" }).select(
         "-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links"
       );
 
@@ -534,6 +536,18 @@ export const deleteCourse = CatchAsyncError(
         return next(new ErrorHandler("không tìm thấy khóa học", 404));
       }
 
+      // Tìm mentor sở hữu khóa học và xóa khóa học khỏi danh sách courses của mentor
+      if (course.mentor) {
+        const mentor = await mongoose.model("Mentor").findById(course.mentor);
+        if (mentor) {
+          // Xóa khóa học khỏi danh sách courses của mentor
+          mentor.courses = mentor.courses.filter(
+            (courseId: mongoose.Types.ObjectId) => courseId.toString() !== id
+          );
+          await mentor.save();
+        }
+      }
+
       await course.deleteOne({ id });
 
       await redis.del(id);
@@ -544,6 +558,226 @@ export const deleteCourse = CatchAsyncError(
       });
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 400));
+    }
+  }
+);
+
+// Mentor tạo khóa học mới (status: draft)
+export const createCourseDraft = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?._id;
+      if (!userId) {
+        return next(new ErrorHandler("Vui lòng đăng nhập", 400));
+      }
+
+      // Kiểm tra xem user có phải là mentor không
+      const user = await userModel.findById(userId);
+      if (!user || user.role !== "mentor") {
+        return next(new ErrorHandler("Chỉ mentor mới có thể tạo khóa học", 403));
+      }
+
+      // Tìm mentor ID từ user ID
+      const mentor = await mongoose.model("Mentor").findOne({ user: userId });
+      if (!mentor) {
+        return next(new ErrorHandler("Không tìm thấy thông tin mentor", 404));
+      }
+
+      const data = req.body;
+      const files = req.files as {
+        image?: Express.Multer.File[];
+        demo?: Express.Multer.File[];
+        videos?: Express.Multer.File[];
+      };
+      const image = files.image?.[0];
+      const demo = files.demo?.[0];
+      const videos = files.videos;
+
+      const course = JSON.parse(data.courseData);
+      
+      // Thêm thông tin mentor và status
+      course.mentor = mentor._id;
+      course.status = "draft"; // mặc định là draft
+
+      course.thumbnail = {
+        url: image?.filename,
+      };
+
+      course.demoUrl = demo?.filename;
+
+      // Kiểm tra nếu có videos
+      if (videos && videos.length > 0) {
+        // Kiểm tra xem courseData có mảng không
+        if (Array.isArray(course.courseData)) {
+          // Duyệt qua từng phần tử trong courseData
+          course.courseData.forEach((item: any, index: number) => {
+            // Nếu tồn tại video tại vị trí tương ứng
+            if (videos[index]) {
+              // Gán filename của video vào videoUrl
+              item.videoUrl = videos[index].filename;
+            }
+          });
+        }
+      }
+
+      const newCourse = await CourseModel.create(course);
+
+      // Thêm khóa học vào danh sách khóa học của mentor
+      mentor.courses.push(newCourse._id);
+      await mentor.save();
+
+      res.status(201).json({
+        success: true,
+        course: newCourse
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
+// Mentor gửi khóa học để duyệt
+export const submitCourseForApproval = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { courseId } = req.params;
+      const userId = req.user?._id;
+
+      if (!userId) {
+        return next(new ErrorHandler("Vui lòng đăng nhập", 400));
+      }
+
+      // Tìm khóa học
+      const course = await CourseModel.findById(courseId);
+      if (!course) {
+        return next(new ErrorHandler("Không tìm thấy khóa học", 404));
+      }
+
+      // Tìm mentor ID từ user ID
+      const mentor = await mongoose.model("Mentor").findOne({ user: userId });
+      if (!mentor) {
+        return next(new ErrorHandler("Không tìm thấy thông tin mentor", 404));
+      }
+
+      // Kiểm tra xem khóa học có thuộc về mentor không
+      if (course.mentor?.toString() !== mentor._id.toString()) {
+        return next(new ErrorHandler("Bạn không có quyền cập nhật khóa học này", 403));
+      }
+
+      // Cập nhật trạng thái thành pending
+      course.status = "pending";
+      await course.save();
+
+      // Tạo thông báo cho admin
+      await NotificationModel.create({
+        title: "Khóa học mới cần phê duyệt",
+        message: `Mentor đã gửi khóa học "${course.name}" để phê duyệt.`,
+        status: "unread"
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Khóa học đã được gửi để phê duyệt"
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
+// Admin phê duyệt hoặc từ chối khóa học
+export const updateCourseStatus = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { courseId, status, reason } = req.body;
+      
+      if (!["pending", "active", "rejected"].includes(status)) {
+        return next(new ErrorHandler("Trạng thái không hợp lệ", 400));
+      }
+
+      // Tìm khóa học
+      const course = await CourseModel.findById(courseId);
+      if (!course) {
+        return next(new ErrorHandler("Không tìm thấy khóa học", 404));
+      }
+
+      // Cập nhật trạng thái khóa học
+      course.status = status;
+      await course.save();
+
+      // Xóa cache Redis nếu có
+      await redis.del(courseId);
+
+      // Tìm mentor của khóa học
+      const mentor = await mongoose.model("Mentor").findById(course.mentor);
+      if (mentor) {
+        const user = await userModel.findById(mentor.user);
+        
+        if (user) {
+          // Gửi email thông báo cho mentor
+          if (status === "active") {
+            await sendMail({
+              email: user.email,
+              subject: "Khóa học của bạn đã được phê duyệt",
+              template: "course-approved.ejs",
+              data: {
+                user: {
+                  name: user.name
+                },
+                course: {
+                  name: course.name
+                }
+              }
+            });
+          } else if (status === "rejected" && reason) {
+            await sendMail({
+              email: user.email,
+              subject: "Khóa học của bạn đã bị từ chối",
+              template: "course-rejected.ejs",
+              data: {
+                user: {
+                  name: user.name
+                },
+                course: {
+                  name: course.name
+                },
+                reason
+              }
+            });
+          }
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Khóa học đã được ${status === "active" ? "phê duyệt" : "từ chối"}`
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
+// Lấy danh sách khóa học đang chờ phê duyệt
+export const getPendingCourses = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const pendingCourses = await CourseModel.find({ status: "pending" })
+        .populate({
+          path: "mentor",
+          select: "_id bio experience",
+          populate: {
+            path: "user",
+            select: "name email avatar"
+          }
+        });
+
+      res.status(200).json({
+        success: true,
+        pendingCourses
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
     }
   }
 );

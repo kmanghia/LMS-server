@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Khóa học của bạn đã được phê duyệt</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-width: 150px;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: #4a90e2;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4a90e2;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        .course-name {
+            font-weight: bold;
+            color: #4a90e2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Xin chúc mừng, <%= user.name %>!</h1>
+        </div>
+        
+        <p>Chúng tôi vui mừng thông báo rằng khóa học <span class="course-name"><%= course.name %></span> của bạn đã được phê duyệt và hiện đã được đăng trên nền tảng của chúng tôi!</p>
+        
+        <p>Khóa học của bạn giờ đây đã sẵn sàng để học viên đăng ký và tham gia. Bạn có thể bắt đầu theo dõi sự tiến bộ của học viên và tương tác với họ thông qua bảng điều khiển Mentor của bạn.</p>
+        
+        <p>Dưới đây là một số điều bạn có thể làm tiếp theo:</p>
+        <ul>
+            <li>Kiểm tra hồ sơ khóa học của bạn để đảm bảo mọi thứ hiển thị chính xác</li>
+            <li>Quảng bá khóa học của bạn trên các kênh xã hội</li>
+            <li>Chuẩn bị sẵn sàng để trả lời câu hỏi từ các học viên tiềm năng</li>
+        </ul>
+        
+        <div style="text-align: center;">
+            <a href="http://localhost:3000/login" class="button">Đăng nhập để xem khóa học của bạn</a>
+        </div>
+        
+        <p>Cảm ơn bạn đã đóng góp nội dung có giá trị cho cộng đồng học tập của chúng tôi!</p>
+        
+        <p>Trân trọng,<br>
+        Đội ngũ LMS</p>
+    </div>
+    
+    <div class="footer">
+        <p>Email này được gửi tự động. Vui lòng không trả lời email này.</p>
+        <p>&copy; 2023 LMS. Tất cả các quyền được bảo lưu.</p>
+    </div>
+</body>
+</html> 

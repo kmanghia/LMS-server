@@ -10,6 +10,7 @@ import orderRouter from "./routes/order.route";
 import notificationRouter from "./routes/notification.route";
 import analyticsRouter from "./routes/analytics.route";
 import layoutRouter from "./routes/layout.route";
+import mentorRouter from "./routes/mentor.route";
 import { rateLimit } from "express-rate-limit";
 import cartRouter from "./routes/cart.route";
 import quizzRouter from "./routes/quizz.route";
@@ -60,7 +61,8 @@ app.use(
   layoutRouter,
   cartRouter,
   quizzRouter,
-  wishListRouter
+  wishListRouter,
+  mentorRouter
 );
 
 const fileTokens = new Map<string, { path: string, expiry: number }>();

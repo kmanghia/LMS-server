@@ -1,0 +1,40 @@
+import express from "express";
+import { authorizeRoles, isAutheticated } from "../middleware/auth";
+import { 
+  registerAsMentor, 
+  getMentorInfo, 
+  updateMentorStatus, 
+  getAllMentors, 
+  getPendingMentors, 
+  reviewMentor, 
+  getMentorCourses,
+  getMentorById
+} from "../controllers/mentor.controller";
+
+const router = express.Router();
+
+// Đăng ký làm mentor
+router.post("/register", registerAsMentor);
+
+// Lấy thông tin mentor
+router.get("/me-mentor", isAutheticated,authorizeRoles("mentor"), getMentorInfo);
+
+// Admin phê duyệt/từ chối mentor
+router.put("/update-status", isAutheticated, authorizeRoles("admin"), updateMentorStatus);
+
+// Admin lấy danh sách tất cả mentor
+router.get("/all", isAutheticated, authorizeRoles("admin"), getAllMentors);
+
+// Admin lấy danh sách mentor đang chờ duyệt
+router.get("/pending", isAutheticated, authorizeRoles("admin"), getPendingMentors);
+
+// User đánh giá mentor
+router.post("/review", isAutheticated, reviewMentor);
+
+// Lấy danh sách khóa học của mentor hiện tại
+router.get("/courses", isAutheticated, authorizeRoles("mentor"), getMentorCourses);
+
+// Lấy thông tin chi tiết mentor theo ID
+router.get("/:id", getMentorById);
+
+export default router; 

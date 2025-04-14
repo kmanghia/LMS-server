@@ -65,6 +65,7 @@ const userSchema: Schema<IUser> = new mongoose.Schema(
     },
     role: {
       type: String,
+      enum: ["user", "admin", "mentor"],
       default: "user",
     },
     isVerified: {

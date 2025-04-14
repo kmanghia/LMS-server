@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chúc mừng! Bạn đã trở thành Mentor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-width: 150px;
+            margin-bottom: 10px;
+        }
+        h1 {
+            color: #4a90e2;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4a90e2;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Chúc mừng, <%= user.name %>!</h1>
+        </div>
+        
+        <p>Chúng tôi rất vui mừng thông báo rằng đơn đăng ký trở thành Mentor của bạn đã được phê duyệt!</p>
+        
+        <p>Giờ đây, bạn có thể:</p>
+        <ul>
+            <li>Tạo và quản lý các khóa học của riêng bạn</li>
+            <li>Tương tác với học viên thông qua hệ thống của chúng tôi</li>
+            <li>Xây dựng hồ sơ Mentor chuyên nghiệp của bạn</li>
+            <li>Kiếm thu nhập từ các khóa học của bạn</li>
+        </ul>
+        
+        <p>Hãy đăng nhập vào tài khoản của bạn để bắt đầu tạo khóa học đầu tiên!</p>
+        
+        <div style="text-align: center;">
+            <a href="http://localhost:3000/login" class="button">Đăng nhập ngay</a>
+        </div>
+        
+        <p>Nếu bạn có bất kỳ câu hỏi nào, đừng ngần ngại liên hệ với đội ngũ hỗ trợ của chúng tôi.</p>
+        
+        <p>Trân trọng,<br>
+        Đội ngũ LMS</p>
+    </div>
+    
+    <div class="footer">
+        <p>Email này được gửi tự động. Vui lòng không trả lời email này.</p>
+        <p>&copy; 2023 LMS. Tất cả các quyền được bảo lưu.</p>
+    </div>
+</body>
+</html> 
