@@ -12,8 +12,43 @@ import {
 import NotificationModel from "../models/notification.Model";
 import { getAllOrdersService, newOrder } from "../services/order.service";
 import { redis } from "../utils/redis";
+import { emitNotification } from "../socketServer";
+import { createCourseGroupChat } from "./chat.controller";
 require("dotenv").config();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+// Add user to course chat function
+const addUserToCourseChat = async (courseId: string, userId: string) => {
+  try {
+    // Tạo request và response objects giả để gọi controller function
+    const mockRequest = {
+      body: { courseId, userId }
+    } as Request;
+    
+    const mockResponse = {
+      status: function(code: number) {
+        return {
+          json: function(data: any) {
+            console.log(`User ${userId} added to course chat for course ${courseId}`);
+            return data;
+          }
+        };
+      }
+    } as Response;
+    
+    const mockNext = ((error: any) => {
+      if (error) {
+        console.error("Error adding user to course chat:", error);
+      }
+    }) as NextFunction;
+    
+    // Gọi trực tiếp controller function
+    await createCourseGroupChat(mockRequest, mockResponse, mockNext);
+  } catch (error) {
+    console.error("Error adding user to course chat:", error);
+    // Non-blocking error - don't throw, just log
+  }
+};
 
 // create order
 export const createOrder = CatchAsyncError(
@@ -95,15 +130,21 @@ export const createOrder = CatchAsyncError(
 
       await user?.save();
 
-      await NotificationModel.create({
+      const notification = await NotificationModel.create({
         user: user?._id,
         title: "Đơn hàng mới",
         message: `Bạn có một đơn đặt hàng mới từ ${course?.name}`,
       });
+      emitNotification(notification);
 
       course.purchased = course.purchased + 1;
 
       await course.save();
+
+      // Add user to course chat
+      if (user?._id && course?._id) {
+        await addUserToCourseChat(course._id.toString(), user._id.toString());
+      }
 
       newOrder(data, res, next);
     } catch (error: any) {
@@ -192,15 +233,21 @@ export const createMobileOrder = CatchAsyncError(
 
       await user?.save();
 
-      await NotificationModel.create({
+      const notification = await NotificationModel.create({
         user: user?._id,
         title: "Đơn hàng mới",
         message: `Bạn có một đơn đặt hàng mới từ ${course?.name}`,
       });
+      emitNotification(notification);
 
       course.purchased = course.purchased + 1;
 
       await course.save();
+
+      // Add user to course chat
+      if (user?._id && course?._id) {
+        await addUserToCourseChat(course._id.toString(), user._id.toString());
+      }
 
       newOrder(data, res, next);
     } catch (error: any) {

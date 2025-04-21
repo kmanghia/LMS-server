@@ -605,10 +605,19 @@ export const getMentorById = CatchAsyncError(
       
       const mentor = await MentorModel.findById(id)
         .populate("user", "name email avatar")
-        .populate("courses");
+        .populate("courses")
+        .populate({
+          path: "reviews.user",
+          select: "name email avatar", // Chọn các trường bạn muốn lấy từ User
+        });
         
       if (!mentor) {
         return next(new ErrorHandler("Không tìm thấy mentor", 404));
+      }
+
+      // Access user info through reviews array
+      if (mentor.reviews.length > 0) {
+        console.log("Chi tiet:", mentor.reviews[0].user);
       }
 
       res.status(200).json({

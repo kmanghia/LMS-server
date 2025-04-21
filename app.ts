@@ -28,6 +28,8 @@ import { isAutheticated } from "./middleware/auth";
 import { accessTokenOptions, refreshTokenOptions } from "./utils/jwt";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import recommenderRouter from "./routes/recommender.route";
+import chatRouter from "./routes/chat.route";
 dotenv.config();
 
 // body parser
@@ -62,7 +64,9 @@ app.use(
   cartRouter,
   quizzRouter,
   wishListRouter,
-  mentorRouter
+  mentorRouter,
+  recommenderRouter,
+  chatRouter
 );
 
 const fileTokens = new Map<string, { path: string, expiry: number }>();

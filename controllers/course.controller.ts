@@ -14,6 +14,7 @@ import axios from "axios";
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import userModel from "../models/user.model";
+import { emitNotification } from "../socketServer";
 
 export const uploadCourse = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -284,11 +285,14 @@ export const addQuestion = CatchAsyncError(
       // Thêm câu hỏi này vào nội dung khóa học của chúng tôi
       couseContent.questions.push(newQuestion);
      
-      await NotificationModel.create({
+      const notification = await NotificationModel.create({
         user: req.user?._id,
         title: "Câu hỏi mới nhận được",
-        message: `Bạn có một câu hỏi mới trong ${couseContent.title}`,
+        message: `Bạn có một câu hỏi mới trong bài học ${couseContent.title} của khóa học ${course?.name}`,
       });
+
+      // Emit socket notification
+      emitNotification(notification);
 
       // Lưu khóa học cập nhật
       await course?.save();
@@ -354,11 +358,13 @@ export const addAnwser = CatchAsyncError(
 
       if (req.user?._id === question.user._id) {
         // Tạo thông báo
-        await NotificationModel.create({
+        const notification = await NotificationModel.create({
           user: req.user?._id,
           title: "Đã nhận được câu trả lời câu hỏi mới",
-          message: `Bạn có câu trả lời câu hỏi mới trong ${couseContent.title}`,
+          message: `Bạn có câu trả lời câu hỏi mới trong bài học ${couseContent.title}của khóa học ${course?.name}`,
         });
+        // Emit socket notification
+        emitNotification(notification);
       } else {
         const data = {
           name: question.user.name,
@@ -403,9 +409,7 @@ export const addReview = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userCourseList = req.user?.courses;
-
       const courseId = req.params.id;
-
 
       const courseExists = userCourseList?.some(
         (course: any) => course._id.toString() === courseId.toString()
@@ -428,7 +432,6 @@ export const addReview = CatchAsyncError(
       };
 
       course?.reviews.push(reviewData);
-      // Tính toán rating khoá học
       let avg = 0;
       
       course?.reviews.forEach((rev: any) => {
@@ -440,16 +443,17 @@ export const addReview = CatchAsyncError(
       }
 
       await course?.save();
-      //Cập nhật lại redis phiên người dùng
-      await redis.set(courseId, JSON.stringify(course), "EX", 604800); // 7days
+      await redis.set(courseId, JSON.stringify(course), "EX", 604800);
 
-
-      await NotificationModel.create({
+      // Tạo notification
+      const notification = await NotificationModel.create({
         user: req.user?._id,
         title: "Nhận được đánh giá mới",
         message: `${req.user?.name} đã đưa ra đánh giá trong ${course?.name}`,
       });
 
+      // Emit socket notification
+      emitNotification(notification);
 
       res.status(200).json({
         success: true,
@@ -669,11 +673,12 @@ export const submitCourseForApproval = CatchAsyncError(
       await course.save();
 
       // Tạo thông báo cho admin
-      await NotificationModel.create({
+      const notification = await NotificationModel.create({
         title: "Khóa học mới cần phê duyệt",
         message: `Mentor đã gửi khóa học "${course.name}" để phê duyệt.`,
         status: "unread"
       });
+      emitNotification(notification);
 
       res.status(200).json({
         success: true,
