@@ -177,6 +177,7 @@ export const editCourse = CatchAsyncError(
         filename: string;
         contentIndex: number;
         quizzIndex: number;
+        uniqueId?: string; // Adding uniqueId for better identification
       }
       
       const questionImageMapping: ImageMapping[] = [];
@@ -186,10 +187,13 @@ export const editCourse = CatchAsyncError(
             content.iquizz.forEach((quizz: any, quizzIndex: number) => {
               if (quizz.questionImage) {
                 console.log(`[DEBUG-SERVER-EDIT] Found questionImage in course data: section=${contentIndex}, quiz=${quizzIndex}, url=${quizz.questionImage.url}`);
+                // Create a uniqueId from contentIndex and quizzIndex to ensure correct mapping
+                const uniqueId = `${contentIndex}_${quizzIndex}`;
                 questionImageMapping.push({
                   filename: quizz.questionImage.url,
                   contentIndex,
-                  quizzIndex
+                  quizzIndex,
+                  uniqueId
                 });
               }
             });
@@ -259,14 +263,59 @@ export const editCourse = CatchAsyncError(
         
         // Log all quiz images for debugging
         quizImages.forEach((imageFile, index) => {
-          console.log(`[DEBUG-SERVER-EDIT] Quiz image ${index}: filename=${imageFile.filename}, originalname=${imageFile.originalname}`);
+          console.log(`[DEBUG-SERVER-EDIT] Quiz image ${index}: filename=${imageFile.filename}, originalname=${imageFile.originalname}, fieldname=${imageFile.fieldname}`);
+          
+          // Đảm bảo filename bắt đầu bằng "quiz_images"
+          if (!imageFile.filename.startsWith('quiz_images')) {
+            const oldPath = path.join(__dirname, '../uploads/images', imageFile.filename);
+            const newFilename = `quiz_images_${imageFile.filename}`;
+            const newPath = path.join(__dirname, '../uploads/images', newFilename);
+            
+            try {
+              // Đổi tên file để bắt đầu bằng "quiz_images"
+              if (fs.existsSync(oldPath)) {
+                fs.renameSync(oldPath, newPath);
+                console.log(`[DEBUG-SERVER-EDIT] Đã đổi tên file từ ${imageFile.filename} thành ${newFilename}`);
+                imageFile.filename = newFilename;
+              }
+            } catch (err) {
+              console.error(`[DEBUG-SERVER-EDIT] Lỗi khi đổi tên file: ${err}`);
+            }
+          }
         });
         
-        // Ghép ảnh với vị trí câu hỏi dựa trên filename
+        // Ghép ảnh với vị trí câu hỏi dựa trên filename và vị trí
         quizImages.forEach((imageFile, index) => {
-          // Tìm index của section và quiz để gán ảnh
-          if (questionImageMapping.length > index) {
-            const mappingInfo = questionImageMapping[index];
+          // Check if this image has a uniqueId in its fieldname or originalname
+          const filenameParts = imageFile.originalname.split('__');
+          const fieldnameParts = imageFile.fieldname.split('__');
+          
+          // Try to find uniqueId from filename or fallback to index-based mapping
+          let uniqueId = '';
+          if (filenameParts.length > 1) {
+            uniqueId = filenameParts[0]; // The uniqueId is now the first part before __
+            console.log(`[DEBUG-SERVER-EDIT] Found uniqueId ${uniqueId} in originalname`);
+          } else if (fieldnameParts.length > 1) {
+            uniqueId = fieldnameParts[fieldnameParts.length - 1];
+            console.log(`[DEBUG-SERVER-EDIT] Found uniqueId ${uniqueId} in fieldname`);
+          }
+          
+          // Find the mapping by uniqueId or index
+          let mappingInfo;
+          if (uniqueId) {
+            mappingInfo = questionImageMapping.find(m => m.uniqueId === uniqueId);
+            if (mappingInfo) {
+              console.log(`[DEBUG-SERVER-EDIT] Found mapping by uniqueId: ${uniqueId}`);
+            }
+          }
+          
+          // Fallback to index-based mapping if uniqueId matching failed
+          if (!mappingInfo && questionImageMapping.length > index) {
+            mappingInfo = questionImageMapping[index];
+            console.log(`[DEBUG-SERVER-EDIT] Using index-based mapping for image ${index}`);
+          }
+          
+          if (mappingInfo) {
             const { contentIndex, quizzIndex } = mappingInfo;
             console.log(`[DEBUG-SERVER-EDIT] Gán ảnh ${imageFile.filename} cho câu hỏi: section=${contentIndex}, quiz=${quizzIndex}`);
             
