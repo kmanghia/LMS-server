@@ -24,7 +24,12 @@ courseRouter.post(
   "/create-course",
   isAutheticated,
   authorizeRoles("admin"),
-  upload.fields([{ name: 'image' }, { name: 'demo' }, { name: 'videos' }]) as any,
+  upload.fields([
+    { name: 'image', maxCount: 1 }, 
+    { name: 'demo', maxCount: 1 }, 
+    { name: 'videos', maxCount: 20 },
+    { name: 'quiz_images', maxCount: 50 }
+  ]) as any,
   uploadCourse
 );
 
@@ -32,7 +37,12 @@ courseRouter.put(
   "/edit-course/:id",
   isAutheticated,
   authorizeRoles("admin", "mentor"),
-  upload.fields([{ name: 'imageedit' }, { name: 'demoedit' }, { name: 'videos' }]) as any,
+  upload.fields([
+    { name: 'imageedit', maxCount: 1 }, 
+    { name: 'demoedit', maxCount: 1 }, 
+    { name: 'videos', maxCount: 20 },
+    { name: 'quiz_images', maxCount: 50 }
+  ]) as any,
   editCourse
 );
 
@@ -74,9 +84,10 @@ courseRouter.post(
   isAutheticated,
   authorizeRoles("mentor"),
   upload.fields([
-    { name: "image", maxCount: 1 },
-    { name: "demo", maxCount: 1 },
-    { name: "videos", maxCount: 20 },
+    { name: 'image', maxCount: 1 }, 
+    { name: 'demo', maxCount: 1 }, 
+    { name: 'videos', maxCount: 20 },
+    { name: 'quiz_images', maxCount: 50 }
   ]) as any,
   createCourseDraft
 );

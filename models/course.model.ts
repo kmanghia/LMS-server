@@ -21,6 +21,9 @@ interface ILink extends Document {
 
 interface IQuizz extends Document {
   question: string;
+  questionImage?: {
+    url: string;
+  };
   options: string[];
   correctAnswer: string;
 }
@@ -76,6 +79,9 @@ const linkSchema = new Schema<ILink>({
 
 const iquizzSchema = new Schema<IQuizz>({
   question: String, // Không bắt buộc
+  questionImage: {
+    url: String
+  },
   options: [String], // Không bắt buộc
   correctAnswer: String, // Không bắt buộc
 });

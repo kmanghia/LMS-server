@@ -129,6 +129,8 @@ export const getChatById = CatchAsyncError(
       const chatId = req.params.id;
       const userId = req.user?._id;
 
+      console.log(`Getting chat with ID: ${chatId} for user: ${userId}`);
+
       const chat = await ChatModel.findById(chatId)
         .populate({
           path: "participants",
@@ -139,16 +141,41 @@ export const getChatById = CatchAsyncError(
           select: "name thumbnail"
         });
 
+      console.log("Found chat:", chat ? "yes" : "no");
+
       if (!chat) {
+        console.log("Chat not found");
         return next(new ErrorHandler("Chat not found", 404));
       }
 
-      // Verify user is a participant
-      const isParticipant = chat.participants.some(
-        participant => participant.toString() === userId.toString()
-      );
+      // Verify user is a participant - handle both object and string IDs
+      let isParticipant = false;
+      
+      if (chat.participants && chat.participants.length > 0) {
+        // Check if participants array contains objects or just IDs
+        const firstParticipant = chat.participants[0];
+        
+        console.log("First participant type:", typeof firstParticipant);
+        console.log("User ID for comparison:", userId);
+        
+        if (typeof firstParticipant === 'object' && firstParticipant !== null) {
+          // Participants have been populated with user objects
+          isParticipant = chat.participants.some(p => {
+            // Sử dụng type assertion để TypeScript hiểu p có thể là object
+            const pObject = p as any;
+            const participantId = pObject._id ? pObject._id.toString() : p.toString();
+            return participantId === userId.toString();
+          });
+        } else {
+          // Participants are still ObjectIDs
+          isParticipant = chat.participants.some(p => p.toString() === userId.toString());
+        }
+      }
+
+      console.log("Is user a participant:", isParticipant);
 
       if (!isParticipant) {
+        console.log("User not authorized to view chat");
         return next(new ErrorHandler("You are not authorized to view this chat", 403));
       }
 
@@ -159,10 +186,14 @@ export const getChatById = CatchAsyncError(
           !message.readBy.includes(userId)
       );
 
+      console.log("Number of unread messages:", unreadMessages.length);
+
       if (unreadMessages.length > 0) {
         const unreadMessageIds = unreadMessages.map(msg => msg._id);
+        console.log("Unread message IDs:", unreadMessageIds);
         
         // Update read status
+        console.log("Updating read status for messages");
         await ChatModel.updateMany(
           { _id: chatId, "messages._id": { $in: unreadMessageIds } },
           { $addToSet: { "messages.$[elem].readBy": userId } },
@@ -170,9 +201,13 @@ export const getChatById = CatchAsyncError(
         );
         
         // Notify other participants
+        console.log("Getting chat participants");
         const chatParticipants = await getChatParticipants(chatId);
+        console.log("Chat participants:", chatParticipants);
+
         chatParticipants.forEach(participantId => {
           if (participantId !== userId.toString()) {
+            console.log(`Notifying participant ${participantId} about read messages`);
             sendDirectMessage(participantId, "messagesRead", { 
               chatId, 
               messageIds: unreadMessageIds, 
@@ -182,12 +217,15 @@ export const getChatById = CatchAsyncError(
         });
       }
 
+      console.log("Sending chat data in response");
       res.status(200).json({
         success: true,
         chat
       });
 
     } catch (error: any) {
+      console.error("Error in getChatById:", error);
+      console.error("Error stack:", error.stack);
       return next(new ErrorHandler(error.message, 500));
     }
   }
@@ -241,7 +279,7 @@ export const createCourseGroupChat = CatchAsyncError(
         // Add welcome message
         courseChat.messages.push({
           sender: mentor.user,
-          content: `Welcome to the ${course.name} discussion group! Feel free to ask questions and share insights with your classmates.`,
+          content: `Chào mừng bạn đến với nhóm thảo luận ${course.name}! Hãy thoải mái đặt câu hỏi và chia sẻ những hiểu biết của bạn với các bạn cùng lớp.`,
           readBy: [mentor.user],
           createdAt: new Date()
         } as any);

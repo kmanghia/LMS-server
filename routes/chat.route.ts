@@ -13,7 +13,7 @@ const chatRouter = express.Router();
 chatRouter.post("/chat/private", isAutheticated, createOrGetPrivateChat);
 
 // Get all user chats
-chatRouter.get("/chats", isAutheticated, getUserChats);
+chatRouter.get("/chat/all", isAutheticated, getUserChats);
 
 // Get chat by ID
 chatRouter.get("/chat/:id", isAutheticated, getChatById);

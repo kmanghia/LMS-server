@@ -21,20 +21,47 @@ export const uploadCourse = CatchAsyncError(
     try {
       const data = req.body;
   //lấy file
-      const files = req.files as {
-        image?: Express.Multer.File[];
-        demo?: Express.Multer.File[];
-        videos?: Express.Multer.File[];
-      };
+      const files = req.files as Record<string, Express.Multer.File[]>;
       const image = files.image?.[0];
       const demo = files.demo?.[0];
       const videos = files.videos;
+      const quizImages = files.quiz_images || [];
 
-      console.log(image)
-      console.log(demo)
-      console.log(videos)
-
-      const course = JSON.parse(data.courseData)
+      console.log('[DEBUG-SERVER] Files nhận được:', Object.keys(files));
+      console.log('[DEBUG-SERVER] Image:', image?.filename);
+      console.log('[DEBUG-SERVER] Demo:', demo?.filename);
+      console.log('[DEBUG-SERVER] Videos count:', videos?.length || 0);
+      console.log(`[DEBUG-SERVER] Số lượng ảnh câu hỏi: ${quizImages.length}`);
+      
+      const course = JSON.parse(data.courseData);
+      
+      // Phân tích dữ liệu để lấy mapping giữa ảnh và câu hỏi
+      interface ImageMapping {
+        filename: string;
+        contentIndex: number;
+        quizzIndex: number;
+      }
+      
+      const questionImageMapping: ImageMapping[] = [];
+      if (course.courseData) {
+        course.courseData.forEach((content: any, contentIndex: number) => {
+          if (content.iquizz) {
+            content.iquizz.forEach((quizz: any, quizzIndex: number) => {
+              if (quizz.questionImage) {
+                console.log(`[DEBUG-SERVER] Found questionImage in course data: section=${contentIndex}, quiz=${quizzIndex}, url=${quizz.questionImage.url}`);
+                questionImageMapping.push({
+                  filename: quizz.questionImage.url,
+                  contentIndex,
+                  quizzIndex
+                });
+              }
+            });
+          }
+        });
+      }
+      
+      console.log(`[DEBUG-SERVER] Created ${questionImageMapping.length} questionImageMappings`);
+      
       course.thumbnail = {
         // public_id: image?.mimetype,
         url: image?.filename,
@@ -56,6 +83,57 @@ export const uploadCourse = CatchAsyncError(
           });
         }
       }
+      
+      // Xử lý các file hình ảnh câu hỏi quiz
+      if (quizImages.length > 0) {
+        console.log('[DEBUG-SERVER] Bắt đầu xử lý ảnh câu hỏi');
+        
+        // Log all quiz images for debugging
+        quizImages.forEach((imageFile, index) => {
+          console.log(`[DEBUG-SERVER] Quiz image ${index}: filename=${imageFile.filename}, originalname=${imageFile.originalname}`);
+        });
+        
+        // Ghép ảnh với vị trí câu hỏi dựa trên filename
+        quizImages.forEach((imageFile, index) => {
+          // Tìm index của section và quiz để gán ảnh
+          if (questionImageMapping.length > index) {
+            const mappingInfo = questionImageMapping[index];
+            const { contentIndex, quizzIndex } = mappingInfo;
+            console.log(`[DEBUG-SERVER] Gán ảnh ${imageFile.filename} cho câu hỏi: section=${contentIndex}, quiz=${quizzIndex}`);
+            
+            // Kiểm tra và xóa ảnh cũ nếu có
+            const courseDataItem = course.courseData[contentIndex];
+            if (courseDataItem && 
+                courseDataItem.iquizz && 
+                courseDataItem.iquizz[quizzIndex] && 
+                courseDataItem.iquizz[quizzIndex].questionImage?.url) {
+              const oldImagePath = path.join(__dirname, '../uploads/images', courseDataItem.iquizz[quizzIndex].questionImage.url);
+              console.log(`[DEBUG-SERVER] Tìm thấy ảnh cũ: ${oldImagePath}`);
+              
+              if (fs.existsSync(oldImagePath)) {
+                fs.unlinkSync(oldImagePath);
+                console.log('[DEBUG-SERVER] Đã xóa ảnh câu hỏi cũ:', oldImagePath);
+              }
+            }
+            
+            if (course.courseData[contentIndex] && 
+                course.courseData[contentIndex].iquizz && 
+                course.courseData[contentIndex].iquizz[quizzIndex]) {
+              
+              // Cập nhật thông tin hình ảnh cho câu hỏi
+              course.courseData[contentIndex].iquizz[quizzIndex].questionImage = {
+                url: imageFile.filename
+              };
+              
+              console.log(`[DEBUG-SERVER] Đã cập nhật questionImage cho câu hỏi`);
+            }
+          } else {
+            console.log(`[DEBUG-SERVER] Không tìm thấy mapping cho ảnh ${imageFile.filename}, index=${index}, mappingLength=${questionImageMapping.length}`);
+          }
+        });
+      } else {
+        console.log('[DEBUG-SERVER] Không có ảnh câu hỏi để xử lý');
+      }
 
       console.log(course.thumbnail);
       createCourse(course, res, next);
@@ -71,11 +149,7 @@ export const editCourse = CatchAsyncError(
     try {
       const user = await userModel.findById(req.user?._id);
       console.log(req.user?._id)
-      const files = req.files as {
-        imageedit?: Express.Multer.File[];
-        demoedit?: Express.Multer.File[];
-        videos?: Express.Multer.File[];
-      };
+      const files = req.files as Record<string, Express.Multer.File[]>;
       const courseId = req.params.id;
       let videoIndex = 0;
       const coursedb = await CourseModel.findById(courseId) as any;
@@ -88,10 +162,42 @@ export const editCourse = CatchAsyncError(
       const image = files.imageedit?.[0];
       const demo = files.demoedit?.[0];
       const videos = files.videos || [];
+      const quizImages = files.quiz_images || [];
 
-      console.log('Uploaded Image 87:', image);
+      console.log('[DEBUG-SERVER-EDIT] Files nhận được:', Object.keys(files));
+      console.log('[DEBUG-SERVER-EDIT] Image:', image?.filename);
+      console.log('[DEBUG-SERVER-EDIT] Demo:', demo?.filename);
+      console.log('[DEBUG-SERVER-EDIT] Videos count:', videos?.length);
+      console.log(`[DEBUG-SERVER-EDIT] Số lượng ảnh câu hỏi: ${quizImages.length}`);
 
       const courses = JSON.parse(data.courseData);
+
+      // Phân tích dữ liệu để lấy mapping giữa ảnh và câu hỏi
+      interface ImageMapping {
+        filename: string;
+        contentIndex: number;
+        quizzIndex: number;
+      }
+      
+      const questionImageMapping: ImageMapping[] = [];
+      if (courses.courseData) {
+        courses.courseData.forEach((content: any, contentIndex: number) => {
+          if (content.iquizz) {
+            content.iquizz.forEach((quizz: any, quizzIndex: number) => {
+              if (quizz.questionImage) {
+                console.log(`[DEBUG-SERVER-EDIT] Found questionImage in course data: section=${contentIndex}, quiz=${quizzIndex}, url=${quizz.questionImage.url}`);
+                questionImageMapping.push({
+                  filename: quizz.questionImage.url,
+                  contentIndex,
+                  quizzIndex
+                });
+              }
+            });
+          }
+        });
+      }
+      
+      console.log(`[DEBUG-SERVER-EDIT] Created ${questionImageMapping.length} questionImageMappings`);
 
       if (image && coursedb.thumbnail?.url) {
         const oldImagePath = path.join(__dirname, '../uploads/images', coursedb.thumbnail.url);
@@ -146,7 +252,57 @@ export const editCourse = CatchAsyncError(
           }
         });
       }
-
+      
+      // Xử lý các file hình ảnh câu hỏi quiz
+      if (quizImages.length > 0) {
+        console.log('[DEBUG-SERVER-EDIT] Bắt đầu xử lý ảnh câu hỏi');
+        
+        // Log all quiz images for debugging
+        quizImages.forEach((imageFile, index) => {
+          console.log(`[DEBUG-SERVER-EDIT] Quiz image ${index}: filename=${imageFile.filename}, originalname=${imageFile.originalname}`);
+        });
+        
+        // Ghép ảnh với vị trí câu hỏi dựa trên filename
+        quizImages.forEach((imageFile, index) => {
+          // Tìm index của section và quiz để gán ảnh
+          if (questionImageMapping.length > index) {
+            const mappingInfo = questionImageMapping[index];
+            const { contentIndex, quizzIndex } = mappingInfo;
+            console.log(`[DEBUG-SERVER-EDIT] Gán ảnh ${imageFile.filename} cho câu hỏi: section=${contentIndex}, quiz=${quizzIndex}`);
+            
+            // Kiểm tra và xóa ảnh cũ nếu có
+            const courseDataItem = coursedb.courseData[contentIndex];
+            if (courseDataItem && 
+                courseDataItem.iquizz && 
+                courseDataItem.iquizz[quizzIndex] && 
+                courseDataItem.iquizz[quizzIndex].questionImage?.url) {
+              const oldImagePath = path.join(__dirname, '../uploads/images', courseDataItem.iquizz[quizzIndex].questionImage.url);
+              console.log(`[DEBUG-SERVER-EDIT] Tìm thấy ảnh cũ: ${oldImagePath}`);
+              
+              if (fs.existsSync(oldImagePath)) {
+                fs.unlinkSync(oldImagePath);
+                console.log('[DEBUG-SERVER-EDIT] Đã xóa ảnh câu hỏi cũ:', oldImagePath);
+              }
+            }
+            
+            if (courses.courseData[contentIndex] && 
+                courses.courseData[contentIndex].iquizz && 
+                courses.courseData[contentIndex].iquizz[quizzIndex]) {
+              
+              // Cập nhật thông tin hình ảnh cho câu hỏi
+              courses.courseData[contentIndex].iquizz[quizzIndex].questionImage = {
+                url: imageFile.filename
+              };
+              
+              console.log(`[DEBUG-SERVER-EDIT] Đã cập nhật questionImage cho câu hỏi`);
+            }
+          } else {
+            console.log(`[DEBUG-SERVER-EDIT] Không tìm thấy mapping cho ảnh ${imageFile.filename}, index=${index}, mappingLength=${questionImageMapping.length}`);
+          }
+        });
+      } else {
+        console.log('[DEBUG-SERVER-EDIT] Không có ảnh câu hỏi để xử lý');
+      }
 
       const course = await CourseModel.findByIdAndUpdate(
         courseId,
@@ -570,6 +726,7 @@ export const deleteCourse = CatchAsyncError(
 export const createCourseDraft = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      console.log('CourseDrafffffffffffffffffffffffffffff')
       const userId = req.user?._id;
       if (!userId) {
         return next(new ErrorHandler("Vui lòng đăng nhập", 400));
@@ -588,20 +745,60 @@ export const createCourseDraft = CatchAsyncError(
       }
 
       const data = req.body;
-      const files = req.files as {
-        image?: Express.Multer.File[];
-        demo?: Express.Multer.File[];
-        videos?: Express.Multer.File[];
-      };
+      const files = req.files as Record<string, Express.Multer.File[]>;
+      
+      // Debug raw file input
+      console.log('[DEBUG-FILES] File keys received:', Object.keys(files));
+      for (const key in files) {
+        console.log(`[DEBUG-FILES] ${key} count: ${files[key].length}`);
+        files[key].forEach((file, index) => {
+          console.log(`[DEBUG-FILES] ${key}[${index}]:`, file.fieldname, file.originalname, file.mimetype);
+        });
+      }
+      
       const image = files.image?.[0];
       const demo = files.demo?.[0];
       const videos = files.videos;
+      const quizImages = files.quiz_images || [];
 
+      console.log('[DEBUG-DRAFT] Files nhận được:', Object.keys(files));
+      console.log('[DEBUG-DRAFT] Image:', image?.filename);
+      console.log('[DEBUG-DRAFT] Demo:', demo?.filename);
+      console.log('[DEBUG-DRAFT] Videos count:', videos?.length || 0);
+      console.log(`[DEBUG-DRAFT] Số lượng ảnh câu hỏi: ${quizImages.length}`);
+      
       const course = JSON.parse(data.courseData);
       
       // Thêm thông tin mentor và status
       course.mentor = mentor._id;
       course.status = "draft"; // mặc định là draft
+
+      // Phân tích dữ liệu để lấy mapping giữa ảnh và câu hỏi
+      interface ImageMapping {
+        filename: string;
+        contentIndex: number;
+        quizzIndex: number;
+      }
+      
+      const questionImageMapping: ImageMapping[] = [];
+      if (course.courseData) {
+        course.courseData.forEach((content: any, contentIndex: number) => {
+          if (content.iquizz) {
+            content.iquizz.forEach((quizz: any, quizzIndex: number) => {
+              if (quizz.questionImage) {
+                console.log(`[DEBUG-DRAFT] Found questionImage in course data: section=${contentIndex}, quiz=${quizzIndex}, url=${quizz.questionImage.url}`);
+                questionImageMapping.push({
+                  filename: quizz.questionImage.url,
+                  contentIndex,
+                  quizzIndex
+                });
+              }
+            });
+          }
+        });
+      }
+      
+      console.log(`[DEBUG-DRAFT] Created ${questionImageMapping.length} questionImageMappings`);
 
       course.thumbnail = {
         url: image?.filename,
@@ -623,6 +820,41 @@ export const createCourseDraft = CatchAsyncError(
           });
         }
       }
+      
+      // Xử lý các file hình ảnh câu hỏi quiz
+      if (quizImages.length > 0) {
+        console.log('[DEBUG-DRAFT] Bắt đầu xử lý ảnh câu hỏi');
+        
+        // Log all quiz images for debugging
+        quizImages.forEach((imageFile, index) => {
+          console.log(`[DEBUG-DRAFT] Quiz image ${index}: filename=${imageFile.filename}, originalname=${imageFile.originalname}, fieldname=${imageFile.fieldname}`);
+        });
+        
+        // Ghép ảnh với vị trí câu hỏi dựa trên filename - alternative approach
+        if (questionImageMapping.length > 0) {
+          quizImages.forEach((imageFile, index) => {
+            if (index < questionImageMapping.length) {
+              const mappingInfo = questionImageMapping[index];
+              const { contentIndex, quizzIndex } = mappingInfo;
+              
+              if (course.courseData[contentIndex] && 
+                  course.courseData[contentIndex].iquizz && 
+                  course.courseData[contentIndex].iquizz[quizzIndex]) {
+                
+                course.courseData[contentIndex].iquizz[quizzIndex].questionImage = {
+                  url: imageFile.filename
+                };
+                
+                console.log(`[DEBUG-DRAFT] Mapped image ${imageFile.filename} to question at section=${contentIndex}, quiz=${quizzIndex}`);
+              }
+            }
+          });
+        } else {
+          console.log('[DEBUG-DRAFT] No question image mappings found, even though images were uploaded');
+        }
+      } else {
+        console.log('[DEBUG-DRAFT] Không có ảnh câu hỏi để xử lý');
+      }
 
       const newCourse = await CourseModel.create(course);
 
@@ -639,7 +871,6 @@ export const createCourseDraft = CatchAsyncError(
     }
   }
 );
-
 // Mentor gửi khóa học để duyệt
 export const submitCourseForApproval = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -786,5 +1017,6 @@ export const getPendingCourses = CatchAsyncError(
     }
   }
 );
+
 
 
