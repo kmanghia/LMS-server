@@ -1,22 +1,59 @@
 import mongoose, { Document, Model, Schema } from "mongoose";
 
+export interface IAttachment {
+  [x: string]: any;
+  type: string; // 'image', 'document', 'video', etc.
+  url: string;
+  filename: string;
+  mimeType: string;
+  size?: number;
+  thumbnailUrl?: string; 
+}
+
 export interface IMessage extends Document {
   sender: Schema.Types.ObjectId;
   content: string;
   readBy: Schema.Types.ObjectId[];
   createdAt: Date;
+  attachments?: IAttachment[]; 
 }
 
 export interface IChat extends Document {
   name: string;
-  chatType: string; // 'private' for 1:1 chats, 'course' for course group chats
-  participants: Schema.Types.ObjectId[]; // User IDs
-  courseId?: Schema.Types.ObjectId; // Only for course chats
-  mentorId: Schema.Types.ObjectId; // The mentor associated with this chat
+  chatType: string; 
+  participants: Schema.Types.ObjectId[]; 
+  courseId?: Schema.Types.ObjectId; 
+  mentorId: Schema.Types.ObjectId; 
   messages: IMessage[];
   createdAt: Date;
   updatedAt: Date;
 }
+
+const attachmentSchema = new Schema<IAttachment>({
+  type: {
+    type: String,
+    required: true,
+    enum: ['image', 'document', 'video', 'audio', 'other']
+  },
+  url: {
+    type: String,
+    required: true
+  },
+  filename: {
+    type: String,
+    required: true
+  },
+  mimeType: {
+    type: String,
+    required: true
+  },
+  size: {
+    type: Number
+  },
+  thumbnailUrl: {
+    type: String
+  }
+});
 
 const messageSchema = new Schema<IMessage>({
   sender: {
@@ -32,6 +69,7 @@ const messageSchema = new Schema<IMessage>({
     type: Schema.Types.ObjectId,
     ref: "User"
   }],
+  attachments: [attachmentSchema], 
   createdAt: {
     type: Date,
     default: Date.now
@@ -66,7 +104,7 @@ const chatSchema = new Schema<IChat>({
   messages: [messageSchema]
 }, { timestamps: true });
 
-// Create indexes for query performance
+
 chatSchema.index({ participants: 1 });
 chatSchema.index({ courseId: 1 });
 chatSchema.index({ mentorId: 1 });

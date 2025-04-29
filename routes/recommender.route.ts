@@ -4,10 +4,10 @@ import { isAutheticated } from "../middleware/auth";
 
 const recommenderRouter = express.Router();
 
-// Recommender API base URL
+
 const RECOMMENDER_API_URL = process.env.RECOMMENDER_API_URL || "http://localhost:8000";
 
-// Get personalized recommendations for the logged-in user
+
 recommenderRouter.get("/recommendations", isAutheticated, async (req, res) => {
   try {
     const userId = req.user?._id.toString();
@@ -22,7 +22,7 @@ recommenderRouter.get("/recommendations", isAutheticated, async (req, res) => {
   }
 });
 
-// Get similar courses
+
 recommenderRouter.get("/similar/:courseId",isAutheticated, async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -37,7 +37,7 @@ recommenderRouter.get("/similar/:courseId",isAutheticated, async (req, res) => {
   }
 });
 
-// Get popular courses
+
 recommenderRouter.get("/popular",isAutheticated, async (req, res) => {
   try {
     const limit = req.query.limit || 5;

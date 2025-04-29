@@ -7,8 +7,11 @@ import mongoose from "mongoose";
 import CourseModel from "../models/course.model";
 import MentorModel from "../models/mentor.model";
 import { sendDirectMessage, getChatParticipants } from "../socketServer";
+import path from "path";
+import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
 
-// Create or get a private chat between a user and a mentor
+
 export const createOrGetPrivateChat = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -19,13 +22,13 @@ export const createOrGetPrivateChat = CatchAsyncError(
         return next(new ErrorHandler("Mentor ID is required", 400));
       }
 
-      // Validate mentor exists
+      
       const mentor = await MentorModel.findById(mentorId);
       if (!mentor) {
         return next(new ErrorHandler("Mentor not found", 404));
       }
 
-      // Check if chat already exists
+
       const existingChat = await ChatModel.findOne({
         chatType: "private",
         participants: { $all: [userId, mentor.user] },
@@ -42,7 +45,7 @@ export const createOrGetPrivateChat = CatchAsyncError(
         });
       }
 
-      // Create new private chat
+      
       const newChat = await ChatModel.create({
         chatType: "private",
         participants: [userId, mentor.user],
@@ -50,7 +53,7 @@ export const createOrGetPrivateChat = CatchAsyncError(
         messages: []
       });
 
-      // Populate participant details
+    
       const populatedChat = await ChatModel.findById(newChat._id).populate({
         path: "participants",
         select: "name avatar"
@@ -67,21 +70,20 @@ export const createOrGetPrivateChat = CatchAsyncError(
   }
 );
 
-// Get all user chats (both private and course)
+
 export const getUserChats = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const userId = req.user?._id;
       
-      console.log("Getting chats for user:", userId);
+      
       
       if (!userId) {
-        console.log("No user ID found in request");
+        
         return next(new ErrorHandler("User not authenticated", 401));
       }
 
-      // Get all chats where user is a participant
-      console.log("Finding chats for user:", userId);
+    
       const chats = await ChatModel.find({
         participants: userId
       })
@@ -99,14 +101,12 @@ export const getUserChats = CatchAsyncError(
       })
       .sort({ updatedAt: -1 });
 
-      console.log("Found chats:", chats.length);
+   
 
-      // Group chats by type
       const privateChats = chats.filter(chat => chat.chatType === "private");
       const courseChats = chats.filter(chat => chat.chatType === "course");
 
-      console.log("Private chats:", privateChats.length);
-      console.log("Course chats:", courseChats.length);
+    
 
       res.status(200).json({
         success: true,
@@ -115,21 +115,19 @@ export const getUserChats = CatchAsyncError(
       });
 
     } catch (error: any) {
-      console.error("Error in getUserChats:", error);
-      console.error("Error stack:", error.stack);
+      
       return next(new ErrorHandler(error.message, 500));
     }
   }
 );
 
-// Get chat by ID with messages
 export const getChatById = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const chatId = req.params.id;
       const userId = req.user?._id;
 
-      console.log(`Getting chat with ID: ${chatId} for user: ${userId}`);
+  
 
       const chat = await ChatModel.findById(chatId)
         .populate({
@@ -141,41 +139,39 @@ export const getChatById = CatchAsyncError(
           select: "name thumbnail"
         });
 
-      console.log("Found chat:", chat ? "yes" : "no");
+      
 
       if (!chat) {
-        console.log("Chat not found");
-        return next(new ErrorHandler("Chat not found", 404));
+    
+        return next(new ErrorHandler("Chat không tìm thấy", 404));
       }
 
-      // Verify user is a participant - handle both object and string IDs
+    
       let isParticipant = false;
       
       if (chat.participants && chat.participants.length > 0) {
-        // Check if participants array contains objects or just IDs
         const firstParticipant = chat.participants[0];
         
-        console.log("First participant type:", typeof firstParticipant);
-        console.log("User ID for comparison:", userId);
+       
         
         if (typeof firstParticipant === 'object' && firstParticipant !== null) {
-          // Participants have been populated with user objects
+  
           isParticipant = chat.participants.some(p => {
-            // Sử dụng type assertion để TypeScript hiểu p có thể là object
+            
             const pObject = p as any;
             const participantId = pObject._id ? pObject._id.toString() : p.toString();
             return participantId === userId.toString();
           });
         } else {
-          // Participants are still ObjectIDs
+          
           isParticipant = chat.participants.some(p => p.toString() === userId.toString());
         }
       }
 
-      console.log("Is user a participant:", isParticipant);
+  
 
       if (!isParticipant) {
-        console.log("User not authorized to view chat");
+        
         return next(new ErrorHandler("You are not authorized to view this chat", 403));
       }
 
@@ -186,28 +182,24 @@ export const getChatById = CatchAsyncError(
           !message.readBy.includes(userId)
       );
 
-      console.log("Number of unread messages:", unreadMessages.length);
+
 
       if (unreadMessages.length > 0) {
         const unreadMessageIds = unreadMessages.map(msg => msg._id);
-        console.log("Unread message IDs:", unreadMessageIds);
-        
-        // Update read status
-        console.log("Updating read status for messages");
+    
         await ChatModel.updateMany(
           { _id: chatId, "messages._id": { $in: unreadMessageIds } },
           { $addToSet: { "messages.$[elem].readBy": userId } },
           { arrayFilters: [{ "elem._id": { $in: unreadMessageIds } }] }
         );
         
-        // Notify other participants
-        console.log("Getting chat participants");
+
         const chatParticipants = await getChatParticipants(chatId);
-        console.log("Chat participants:", chatParticipants);
+        
 
         chatParticipants.forEach(participantId => {
           if (participantId !== userId.toString()) {
-            console.log(`Notifying participant ${participantId} about read messages`);
+            
             sendDirectMessage(participantId, "messagesRead", { 
               chatId, 
               messageIds: unreadMessageIds, 
@@ -217,40 +209,40 @@ export const getChatById = CatchAsyncError(
         });
       }
 
-      console.log("Sending chat data in response");
+      console.log("Gửi dữ liệu chat về trong phản hồi");
       res.status(200).json({
         success: true,
         chat
       });
 
     } catch (error: any) {
-      console.error("Error in getChatById:", error);
-      console.error("Error stack:", error.stack);
+      console.error("Lỗi khi getChatById:", error);
+      console.error("Lỗi Stack:", error.stack);
       return next(new ErrorHandler(error.message, 500));
     }
   }
 );
 
-// Create a course group chat when user purchases a course
+
 export const createCourseGroupChat = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { courseId, userId } = req.body;
       
       if (!courseId || !userId) {
-        return next(new ErrorHandler("Course ID and User ID are required", 400));
+        return next(new ErrorHandler("ID khóa học và ID người dùng bắt buộc", 400));
       }
 
       // Validate course exists
       const course = await CourseModel.findById(courseId);
       if (!course) {
-        return next(new ErrorHandler("Course not found", 404));
+        return next(new ErrorHandler("Khóa học không tìm thấy", 404));
       }
 
       // Get the mentor
       const mentor = await MentorModel.findById(course.mentor);
       if (!mentor) {
-        return next(new ErrorHandler("Mentor not found", 404));
+        return next(new ErrorHandler("Không tìm thấy giảng viên", 404));
       }
 
       // Check if a group chat already exists for this course
@@ -268,7 +260,7 @@ export const createCourseGroupChat = CatchAsyncError(
       } else {
         // Create new course group chat
         courseChat = await ChatModel.create({
-          name: course.name + " Discussion Group",
+          name: course.name + " Nhóm thảo luận",
           chatType: "course",
           participants: [mentor.user, userId],
           courseId: courseId,
@@ -289,7 +281,7 @@ export const createCourseGroupChat = CatchAsyncError(
 
       res.status(201).json({
         success: true,
-        message: "User added to course chat successfully",
+        message: "Thêm người dùng vào khóa học thành công",
         chatId: courseChat._id
       });
 
@@ -297,4 +289,82 @@ export const createCourseGroupChat = CatchAsyncError(
       return next(new ErrorHandler(error.message, 500));
     }
   }
-); 
+);
+
+// Add upload attachments controller
+export const uploadAttachments = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.files || req.files.length === 0) {
+        return next(new ErrorHandler("No files uploaded", 400));
+      }
+
+      const uploadedFiles = Array.isArray(req.files) ? req.files : [req.files];
+      const attachments = uploadedFiles.map(file => {
+        // Determine file type
+        let type = 'document';
+        const mimeType = file.mimetype as string;
+
+        if (mimeType.startsWith('image/')) {
+          type = 'image';
+        } else if (mimeType.startsWith('video/')) {
+          type = 'video';
+        } else if (mimeType.startsWith('audio/')) {
+          type = 'audio';
+        }
+
+        // Extract only the filename from the path
+        const filePath = file.path as string;
+        // Handle both Windows and Unix-style paths
+        const filename = filePath.split(/[\/\\]/).pop() || '';
+        
+        // Generate thumbnail for certain file types
+        let thumbnailUrl = undefined;
+        if (type === 'image') {
+          // For images, use only the filename for thumbnail too
+          thumbnailUrl = `thumbnail_${filename}`;
+        }
+
+        return {
+          type,
+          url: filename, // Store only the filename
+          filename: file.originalname as string,
+          mimeType: mimeType,
+          size: file.size as number,
+          thumbnailUrl
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        attachments
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
+
+     
+  
+  
+      
+    
+
+
+  
+   
+    
+
+   
+   
+
+     
+    
+ 
+ 
+
+ 
+   
+  

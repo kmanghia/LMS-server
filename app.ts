@@ -34,7 +34,10 @@ dotenv.config();
 
 // body parser
 app.use(express.json({ limit: "100mb" }));
+
+;
 app.use(express.static('uploads'));
+
 // cookie parser
 app.use(cookieParser());
 const corsOptions = {

@@ -77,7 +77,7 @@ export const initSocketServer = (server: http.Server) => {
     // Handle new message
     socket.on("sendMessage", async (data) => {
       try {
-        const { chatId, message, senderId, clientId } = data;
+        const { chatId, message, senderId, clientId, attachments } = data;
         
         if (!chatId || !message || !senderId) {
           socket.emit("messageError", { message: "cannot send message missing data" });
@@ -94,13 +94,20 @@ export const initSocketServer = (server: http.Server) => {
           return;
         }
 
-        // Create message object without typecasting to IMessage
-        chat.messages.push({
+        // Create message object with attachments if provided
+        const messageObj: any = {
           sender: new mongoose.Types.ObjectId(senderId),
           content: message,
           readBy: [new mongoose.Types.ObjectId(senderId)],
           createdAt: new Date()
-        } as any); // Use 'as any' to bypass type check
+        };
+        
+        // Add attachments if provided
+        if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+          messageObj.attachments = attachments;
+        }
+        
+        chat.messages.push(messageObj);
         
         await chat.save();
 
