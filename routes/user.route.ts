@@ -14,7 +14,7 @@ import {
   updateUserInfo,
   updateUserRole,
   getProgessOfUser,
-  markChapterAsCompletedOfUser,
+  markChapterAsCompleted,
   sendCertificateAfterCourse,
 
   getNotesByCourseDataIdOfUser,
@@ -77,7 +77,7 @@ userRouter.get(
 userRouter.put(
   "/user/mark-chapter",
   isAutheticated,
-  markChapterAsCompletedOfUser
+  markChapterAsCompleted
 )
 
 userRouter.post(

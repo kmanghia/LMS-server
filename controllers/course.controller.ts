@@ -361,7 +361,32 @@ export const editCourse = CatchAsyncError(
         { new: true }
       );
 
-    
+      // Send notifications to users who purchased this course about the update
+      try {
+        // Find all users who purchased this course
+        const users = await userModel.find({
+          "courses.courseId": courseId
+        });
+
+        // Create notifications for all users who purchased the course
+        if (users.length > 0) {
+          for (const user of users) {
+            const notification = await NotificationModel.create({
+              title: "Khóa học đã được cập nhật",
+              message: `Khóa học "${course?.name}" đã được cập nhật với nội dung mới.`,
+              userId: user._id.toString(),
+              recipientRole: "user",
+              courseId: courseId,
+              type: "update",
+              link: `/course/${courseId}`
+            });
+            emitNotification(notification);
+          }
+          console.log(`Đã gửi thông báo cập nhật khóa học cho ${users.length} học viên`);
+        }
+      } catch (notificationError) {
+        console.error("Lỗi khi gửi thông báo cập nhật khóa học:", notificationError);
+      }
 
       res.status(201).json({
         success: true,
@@ -491,9 +516,13 @@ export const addQuestion = CatchAsyncError(
       couseContent.questions.push(newQuestion);
      
       const notification = await NotificationModel.create({
-        user: req.user?._id,
+        userId: course?.mentor?.toString() || "",
         title: "Câu hỏi mới nhận được",
         message: `Bạn có một câu hỏi mới trong bài học ${couseContent.title} của khóa học ${course?.name}`,
+        recipientRole: "mentor",
+        type: "discussion",
+        courseId: course?._id?.toString() || "",
+        link: `/mentor/courses/${course?._id}`
       });
 
       // Emit socket notification
@@ -564,9 +593,13 @@ export const addAnwser = CatchAsyncError(
       if (req.user?._id === question.user._id) {
         // Tạo thông báo
         const notification = await NotificationModel.create({
-          user: req.user?._id,
+          userId: question.user._id,
           title: "Đã nhận được câu trả lời câu hỏi mới",
-          message: `Bạn có câu trả lời câu hỏi mới trong bài học ${couseContent.title}của khóa học ${course?.name}`,
+          message: `Bạn có câu trả lời câu hỏi mới trong bài học ${couseContent.title} của khóa học ${course?.name}`,
+          recipientRole: "user",
+          type: "discussion",
+          courseId: course?._id?.toString() || "",
+          link: `/courses/${course?._id}`
         });
         // Emit socket notification
         emitNotification(notification);
@@ -652,9 +685,13 @@ export const addReview = CatchAsyncError(
 
       // Tạo notification
       const notification = await NotificationModel.create({
-        user: req.user?._id,
+        userId: course?.mentor?.toString() || "",
         title: "Nhận được đánh giá mới",
         message: `${req.user?.name} đã đưa ra đánh giá trong ${course?.name}`,
+        recipientRole: "mentor",
+        type: "review",
+        courseId: course?._id?.toString() || "",
+        link: `/mentor/courses/${course?._id}`
       });
 
       // Emit socket notification
@@ -956,7 +993,11 @@ export const submitCourseForApproval = CatchAsyncError(
       const notification = await NotificationModel.create({
         title: "Khóa học mới cần phê duyệt",
         message: `Mentor đã gửi khóa học "${course.name}" để phê duyệt.`,
-        status: "unread"
+        status: "unread",
+        recipientRole: "admin",
+        type: "course",
+        courseId: course._id.toString(),
+        link: `/admin/courses/pending`
       });
       emitNotification(notification);
 
@@ -1014,6 +1055,18 @@ export const updateCourseStatus = CatchAsyncError(
                 }
               }
             });
+
+            // Create notification for mentor about course approval
+            const notification = await NotificationModel.create({
+              title: "Khóa học đã được phê duyệt",
+              message: `Khóa học "${course.name}" của bạn đã được phê duyệt và đã hiển thị công khai.`,
+              userId: user._id.toString(),
+              recipientRole: "mentor",
+              courseId: course._id.toString(),
+              type: "course",
+              link: `/mentor/courses/${course._id.toString()}`
+            });
+            emitNotification(notification);
           } else if (status === "rejected" && reason) {
             await sendMail({
               email: user.email,
@@ -1029,6 +1082,18 @@ export const updateCourseStatus = CatchAsyncError(
                 reason
               }
             });
+
+            // Create notification for mentor about course rejection
+            const notification = await NotificationModel.create({
+              title: "Khóa học đã bị từ chối",
+              message: `Khóa học "${course.name}" của bạn đã bị từ chối với lý do: "${reason}".`,
+              userId: user._id.toString(),
+              recipientRole: "mentor",
+              courseId: course._id.toString(),
+              type: "course",
+              link: `/mentor/courses/${course._id.toString()}`
+            });
+            emitNotification(notification);
           }
         }
       }

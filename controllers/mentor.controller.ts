@@ -113,7 +113,10 @@ export const registerAsMentor = CatchAsyncError(
       await NotificationModel.create({
         title: "Đăng ký làm mentor mới",
         message: `Người dùng mới đăng ký làm mentor. Vui lòng xem xét.`,
-        status: "unread"
+        status: "unread",
+        recipientRole: "admin",
+        type: "system",
+        link: `/admin/mentors/pending`
       });
 
       // Nếu là người dùng mới, trả về token
@@ -172,7 +175,13 @@ export const getMentorInfo = CatchAsyncError(
         return next(new ErrorHandler("Vui lòng đăng nhập", 400));
       }
 
-      const mentor = await MentorModel.findOne({ user: userId }).populate("courses");
+      const mentor = await MentorModel.findOne({ user: userId })
+        .populate("courses")
+        .populate({
+          path: "reviews.user",
+          select: "name avatar"
+        });
+      
       if (!mentor) {
         return next(new ErrorHandler("Không tìm thấy thông tin mentor", 404));
       }

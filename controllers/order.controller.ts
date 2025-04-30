@@ -14,6 +14,7 @@ import { getAllOrdersService, newOrder } from "../services/order.service";
 import { redis } from "../utils/redis";
 import { emitNotification } from "../socketServer";
 import { createCourseGroupChat } from "./chat.controller";
+import MentorModel from "../models/mentor.model";
 require("dotenv").config();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
@@ -131,11 +132,30 @@ export const createOrder = CatchAsyncError(
       await user?.save();
 
       const notification = await NotificationModel.create({
-        user: user?._id,
+        userId: user?._id,
         title: "Đơn hàng mới",
-        message: `Bạn có một đơn đặt hàng mới từ ${course?.name}`,
+        message: `Bạn đã mua khóa học "${course?.name}" thành công`,
+        recipientRole: "user",
+        type: "purchase",
+        courseId: course?._id.toString(),
+        link: `/courses/${course?._id}`
       });
       emitNotification(notification);
+
+      // Thông báo cho mentor về đơn hàng mới
+      const courseOwner = await MentorModel.findById(course?.mentor);
+      if (courseOwner) {
+        const mentorNotification = await NotificationModel.create({
+          userId: courseOwner.user.toString(),
+          title: "Có học viên mới",
+          message: `Học viên ${user?.name} đã mua khóa học "${course?.name}"`,
+          recipientRole: "mentor",
+          type: "purchase",
+          courseId: course?._id.toString(),
+          link: `/mentor/courses/${course?._id}`
+        });
+        emitNotification(mentorNotification);
+      }
 
       course.purchased = course.purchased + 1;
 
@@ -234,11 +254,30 @@ export const createMobileOrder = CatchAsyncError(
       await user?.save();
 
       const notification = await NotificationModel.create({
-        user: user?._id,
+        userId: user?._id,
         title: "Đơn hàng mới",
-        message: `Bạn có một đơn đặt hàng mới từ ${course?.name}`,
+        message: `Bạn đã mua khóa học "${course?.name}" thành công`,
+        recipientRole: "user",
+        type: "purchase",
+        courseId: course?._id.toString(),
+        link: `/courses/${course?._id}`
       });
       emitNotification(notification);
+
+      // Thông báo cho mentor về đơn hàng mới
+      const courseOwner = await MentorModel.findById(course?.mentor);
+      if (courseOwner) {
+        const mentorNotification = await NotificationModel.create({
+          userId: courseOwner.user.toString(),
+          title: "Có học viên mới",
+          message: `Học viên ${user?.name} đã mua khóa học "${course?.name}"`,
+          recipientRole: "mentor",
+          type: "purchase",
+          courseId: course?._id.toString(),
+          link: `/mentor/courses/${course?._id}`
+        });
+        emitNotification(mentorNotification);
+      }
 
       course.purchased = course.purchased + 1;
 

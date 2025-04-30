@@ -20,6 +20,9 @@ import {
 import cloudinary from "cloudinary";
 import { uploadBase64ToS3, deleteFile } from '../utils/s3';
 import fs from "fs"
+import { createNotification } from "./notification.controller";
+import CourseModel from "../models/course.model";
+
 interface IRegistrationBody {
   name: string;
   email: string;
@@ -460,58 +463,92 @@ export const getProgessOfUser = CatchAsyncError(
   }
 )
 
-export const markChapterAsCompletedOfUser = CatchAsyncError(
+export const markChapterAsCompleted = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const id = req.user?._id;
-      const chapterId = req.query.chapterId;
-      const courseId = req.query.courseId;
+      const { courseId, chapterId } = req.query;
+      const userId = req.user?._id;
 
-      console.log("User ID:", id);
-      console.log("Chapter ID:", chapterId); 
-      console.log("Course ID:", courseId);
+      if (!courseId || !chapterId) {
+        return next(new ErrorHandler("Missing required parameters", 400));
+      }
 
-      const user = await userModel.findById(id);
-      console.log("Found user:", user?._id);
+      const user = await userModel.findById(userId);
+      if (!user) {
+        return next(new ErrorHandler("User not found", 404));
+      }
 
-      const progresses = user?.progress;
-      console.log("User progress:", progresses);
+      // Đảm bảo progress tồn tại
+      if (!user.progress) {
+        user.progress = [];
+      }
 
-      const courseProgress = progresses?.find(item => item.courseId.toString() === courseId);
-      console.log("Course progress:", courseProgress);
+      // Tìm khóa học trong tiến trình của người dùng
+      const courseProgress = user.progress.find((p) => p.courseId.toString() === courseId);
 
-      let chapterCourse = courseProgress?.chapters.find(item => item.chapterId.toString() === chapterId);
-      console.log("Chapter before update:", chapterCourse);
-
-      if (chapterCourse) {
-        chapterCourse.isCompleted = true;
-        console.log("Chapter after update:", chapterCourse);
-      } else {
-        // If chapter not found, add new chapter to course progress
-        if (courseProgress) {
+      if (courseProgress) {
+        // Kiểm tra xem chapter đã được đánh dấu hoàn thành chưa
+        const chapterIndex = courseProgress.chapters.findIndex((c) => c.chapterId.toString() === chapterId);
+        if (chapterIndex !== -1) {
+          // Nếu chương học chưa hoàn thành, cập nhật trạng thái
+          if (!courseProgress.chapters[chapterIndex].isCompleted) {
+            courseProgress.chapters[chapterIndex].isCompleted = true;
+            
+            // Kiểm tra xem đã hoàn thành cả khóa học chưa
+            const allChaptersCompleted = courseProgress.chapters.every(chapter => chapter.isCompleted);
+            
+            // Nếu đã hoàn thành toàn bộ khóa học, gửi thông báo chúc mừng
+            if (allChaptersCompleted) {
+              // Truy vấn để lấy tên khóa học
+              const course = await CourseModel.findById(courseId);
+              
+              if (course) {
+                // Tạo thông báo chúc mừng hoàn thành khóa học
+                createNotification({
+                  title: "Chúc mừng! Hoàn thành khóa học",
+                  message: `Bạn đã hoàn thành tất cả bài học trong khóa học "${course.name}"`,
+                  userId: userId.toString(),
+                  recipientRole: "user",
+                  type: "course",
+                  courseId: courseId.toString(),
+                  link: `/courses/${courseId}`
+                });
+              }
+            }
+          }
+        } else {
+          // Nếu chapter không tồn tại, thêm mới
           courseProgress.chapters.push({
             chapterId: chapterId as string,
             isCompleted: true
           });
-          console.log("Added new chapter:", courseProgress.chapters[courseProgress.chapters.length - 1]);
-        } else {
-          console.log("Course progress not found");
         }
+      } else {
+        // Nếu chưa có tiến trình khóa học, tạo mới
+        user.progress.push({
+          courseId: courseId as string,
+          chapters: [{
+            chapterId: chapterId as string,
+            isCompleted: true
+          }]
+        });
       }
 
-      await user?.save();
-      console.log("User saved successfully");
+      await user.save();
+      
+      // Clear cache
+      await redis.del(userId);
 
       res.status(200).json({
         success: true,
-        response: chapterCourse
-      })
+        message: "Chapter marked as completed"
+      });
     } catch (error: any) {
-      console.error("Error in markChapterAsCompletedOfUser:", error);
-      return next(new ErrorHandler(error.message, 400));
+      console.error("Error marking chapter as completed:", error);
+      return next(new ErrorHandler(error.message, 500));
     }
   }
-)
+);
 
 export const sendCertificateAfterCourse = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
