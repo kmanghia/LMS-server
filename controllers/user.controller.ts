@@ -463,92 +463,29 @@ export const getProgessOfUser = CatchAsyncError(
   }
 )
 
-export const markChapterAsCompleted = CatchAsyncError(
+export const markChapterAsCompletedOfUser = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { courseId, chapterId } = req.query;
-      const userId = req.user?._id;
-
-      if (!courseId || !chapterId) {
-        return next(new ErrorHandler("Missing required parameters", 400));
+      const id = req.user?._id;
+      const chapterId = req.query.chapterId;
+      const courseId = req.query.courseId;
+      const user = await userModel.findById(id);
+      const progresses = user?.progress;
+      const courseProgress = progresses?.find(item => item.courseId.toString() === courseId);
+      let chapterCourse = courseProgress?.chapters.find(item => item.chapterId.toString() === chapterId);
+      if (chapterCourse) {
+        chapterCourse.isCompleted = true;
       }
-
-      const user = await userModel.findById(userId);
-      if (!user) {
-        return next(new ErrorHandler("User not found", 404));
-      }
-
-      // Đảm bảo progress tồn tại
-      if (!user.progress) {
-        user.progress = [];
-      }
-
-      // Tìm khóa học trong tiến trình của người dùng
-      const courseProgress = user.progress.find((p) => p.courseId.toString() === courseId);
-
-      if (courseProgress) {
-        // Kiểm tra xem chapter đã được đánh dấu hoàn thành chưa
-        const chapterIndex = courseProgress.chapters.findIndex((c) => c.chapterId.toString() === chapterId);
-        if (chapterIndex !== -1) {
-          // Nếu chương học chưa hoàn thành, cập nhật trạng thái
-          if (!courseProgress.chapters[chapterIndex].isCompleted) {
-            courseProgress.chapters[chapterIndex].isCompleted = true;
-            
-            // Kiểm tra xem đã hoàn thành cả khóa học chưa
-            const allChaptersCompleted = courseProgress.chapters.every(chapter => chapter.isCompleted);
-            
-            // Nếu đã hoàn thành toàn bộ khóa học, gửi thông báo chúc mừng
-            if (allChaptersCompleted) {
-              // Truy vấn để lấy tên khóa học
-              const course = await CourseModel.findById(courseId);
-              
-              if (course) {
-                // Tạo thông báo chúc mừng hoàn thành khóa học
-                createNotification({
-                  title: "Chúc mừng! Hoàn thành khóa học",
-                  message: `Bạn đã hoàn thành tất cả bài học trong khóa học "${course.name}"`,
-                  userId: userId.toString(),
-                  recipientRole: "user",
-                  type: "course",
-                  courseId: courseId.toString(),
-                  link: `/courses/${courseId}`
-                });
-              }
-            }
-          }
-        } else {
-          // Nếu chapter không tồn tại, thêm mới
-          courseProgress.chapters.push({
-            chapterId: chapterId as string,
-            isCompleted: true
-          });
-        }
-      } else {
-        // Nếu chưa có tiến trình khóa học, tạo mới
-        user.progress.push({
-          courseId: courseId as string,
-          chapters: [{
-            chapterId: chapterId as string,
-            isCompleted: true
-          }]
-        });
-      }
-
-      await user.save();
-      
-      // Clear cache
-      await redis.del(userId);
-
+      await user?.save();
       res.status(200).json({
         success: true,
-        message: "Chapter marked as completed"
-      });
+        response: chapterCourse
+      })
     } catch (error: any) {
-      console.error("Error marking chapter as completed:", error);
-      return next(new ErrorHandler(error.message, 500));
+      return next(new ErrorHandler(error.message, 400));
     }
   }
-);
+)
 
 export const sendCertificateAfterCourse = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
