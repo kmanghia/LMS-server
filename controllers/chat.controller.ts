@@ -127,7 +127,7 @@ export const getChatById = CatchAsyncError(
       const chatId = req.params.id;
       const userId = req.user?._id;
 
-  
+      console.log(`Getting chat details for chatId: ${chatId}, userId: ${userId}`);
 
       const chat = await ChatModel.findById(chatId)
         .populate({
@@ -139,39 +139,30 @@ export const getChatById = CatchAsyncError(
           select: "name thumbnail"
         });
 
-      
-
       if (!chat) {
-    
+        console.log(`Chat not found: ${chatId}`);
         return next(new ErrorHandler("Chat không tìm thấy", 404));
       }
 
-    
       let isParticipant = false;
       
       if (chat.participants && chat.participants.length > 0) {
         const firstParticipant = chat.participants[0];
         
-       
-        
         if (typeof firstParticipant === 'object' && firstParticipant !== null) {
-  
           isParticipant = chat.participants.some(p => {
-            
             const pObject = p as any;
             const participantId = pObject._id ? pObject._id.toString() : p.toString();
             return participantId === userId.toString();
           });
         } else {
-          
           isParticipant = chat.participants.some(p => p.toString() === userId.toString());
         }
       }
 
-  
+      console.log(`User ${userId} is${isParticipant ? '' : ' not'} a participant in chat ${chatId}`);
 
       if (!isParticipant) {
-        
         return next(new ErrorHandler("You are not authorized to view this chat", 403));
       }
 
@@ -182,7 +173,7 @@ export const getChatById = CatchAsyncError(
           !message.readBy.includes(userId)
       );
 
-
+      console.log(`Found ${unreadMessages.length} unread messages for user ${userId}`);
 
       if (unreadMessages.length > 0) {
         const unreadMessageIds = unreadMessages.map(msg => msg._id);
@@ -193,13 +184,13 @@ export const getChatById = CatchAsyncError(
           { arrayFilters: [{ "elem._id": { $in: unreadMessageIds } }] }
         );
         
+        console.log(`Marked ${unreadMessageIds.length} messages as read`);
 
         const chatParticipants = await getChatParticipants(chatId);
-        
+        console.log(`Notifying ${chatParticipants.length} chat participants about read messages`);
 
         chatParticipants.forEach(participantId => {
           if (participantId !== userId.toString()) {
-            
             sendDirectMessage(participantId, "messagesRead", { 
               chatId, 
               messageIds: unreadMessageIds, 
@@ -209,7 +200,7 @@ export const getChatById = CatchAsyncError(
         });
       }
 
-      console.log("Gửi dữ liệu chat về trong phản hồi");
+      console.log(`Sending chat data response for chat ${chatId} with ${chat.messages.length} messages`);
       res.status(200).json({
         success: true,
         chat

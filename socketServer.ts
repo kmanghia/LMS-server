@@ -21,10 +21,11 @@ export const initSocketServer = (server: http.Server) => {
     let currentClientId: string | null = null;
 
     // Authenticate user and track their socket
-    socket.on("authenticate", (data: { userId: string, clientType?: string, clientId?: string } | string) => {
+    socket.on("authenticate", (data: { userId: string, clientType?: string, clientId?: string, userRole?: string } | string) => {
       let userId: string;
       let clientId: string = "default";
       let clientType: string = "unknown";
+      let userRole: string = "user"; // Default role
       
       // Hỗ trợ cả format cũ và mới
       if (typeof data === 'string') {
@@ -34,16 +35,23 @@ export const initSocketServer = (server: http.Server) => {
         userId = data.userId;
         clientId = data.clientId || `default_${socket.id}`;
         clientType = data.clientType || "unknown";
+        userRole = data.userRole || "user";
       }
 
       if (userId) {
         currentUserId = userId;
         currentClientId = clientId;
         
-        console.log(`User ${userId} authenticated with socket ${socket.id} (Client: ${clientType}, ID: ${clientId})`);
+        console.log(`User ${userId} authenticated with socket ${socket.id} (Client: ${clientType}, ID: ${clientId}, Role: ${userRole})`);
         
         // Add user to connected users map with clientId
         socket.join(`user:${userId}`);
+        
+        // Thêm user vào room theo role
+        if (userRole) {
+          socket.join(`role:${userRole}`);
+          console.log(`Added to role room: ${userRole}`);
+        }
         
         // Kiểm tra xem userId đã tồn tại trong map chưa
         if (!connectedUsers.has(userId)) {
@@ -59,10 +67,23 @@ export const initSocketServer = (server: http.Server) => {
     });
 
     // Join a specific chat room
-    socket.on("joinChat", (chatId: string) => {
+    socket.on("joinChat", (data: string | { chatId: string, userId: string }) => {
+      let chatId: string;
+      
+      // Support both formats:
+      // 1. Mobile app sends just the chatId as a string
+      // 2. Web app sends an object with chatId and userId
+      if (typeof data === 'string') {
+        chatId = data;
+        console.log(`Socket ${socket.id} joined chat:${chatId} (mobile format)`);
+      } else {
+        chatId = data.chatId;
+        console.log(`Socket ${socket.id} joined chat:${chatId} (web format) for user ${data.userId}`);
+      }
+      
       if (chatId) {
         socket.join(`chat:${chatId}`);
-        console.log(`Socket ${socket.id} joined chat:${chatId}`);
+        console.log(`Socket ${socket.id} successfully joined chat:${chatId}`);
       }
     });
 
@@ -86,6 +107,8 @@ export const initSocketServer = (server: http.Server) => {
 
         // Ghi log thông tin client để debug
         console.log(`Processing message from senderId: ${senderId}, clientId: ${clientId || 'not provided'}`);
+        console.log(`Message content: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`);
+        console.log(`Target chatId: ${chatId}`);
 
         // Add message to database
         const chat = await ChatModel.findById(chatId);
@@ -114,6 +137,8 @@ export const initSocketServer = (server: http.Server) => {
         // Get the newly added message with its generated _id
         const savedMessage = chat.messages[chat.messages.length - 1];
 
+        console.log(`Emitting to chat:${chatId}, message ID: ${savedMessage._id}`);
+        
         // Broadcast to all users in the chat room
         io.to(`chat:${chatId}`).emit("newMessage", {
           chatId,
@@ -176,7 +201,7 @@ export const initSocketServer = (server: http.Server) => {
     // Listen for 'notification' event from the frontend
     socket.on("notification", (data) => {
       // Broadcast the notification data to all connected clients (admin dashboard)
-      io.emit("newNotification", data);
+      io.emit("new_notification", data);
     });
 
     socket.on("disconnect", () => {
@@ -225,11 +250,50 @@ export const initSocketServer = (server: http.Server) => {
 // Helper function to emit notifications
 export const emitNotification = (notification: any) => {
   if (io) {
-    // Emit notification data
-    io.emit("newNotification", notification);
-    // Emit audio event separately
+    console.log("==== NOTIFICATION DEBUG ====");
+    console.log("Emitting notification:", JSON.stringify(notification));
+
+    // Xác định đối tượng nhận thông báo
+    const recipientRole = notification.recipientRole;
+    console.log(`Recipient role: ${recipientRole}`);
+    
+    // Phát sự kiện cho tất cả người dùng
+    if (recipientRole === "all") {
+      console.log("Broadcasting to ALL users");
+      // Emit với cả tên sự kiện cũ và mới để đảm bảo tương thích
+      io.emit("newNotification", notification);
+      io.emit("new_notification", notification);
+    } 
+    // Phát sự kiện cho tất cả mentor
+    else if (recipientRole === "mentor") {
+      console.log("Broadcasting to MENTOR role room");
+      // Phát cho room mentor 
+      io.to(`role:mentor`).emit("new_notification", notification);
+      io.to(`role:mentor`).emit("newNotification", notification);
+      
+      // Log detailed debug information
+      console.log("Broadcasting notification to mentor role:");
+      console.log("Event names: newNotification, new_notification");
+      console.log(`Active mentor sockets: ${io.sockets.adapter.rooms.get('role:mentor')?.size || 0}`);
+    }
+    // Phát sự kiện cho tất cả user thông thường
+    else if (recipientRole === "user") {
+      console.log("Broadcasting to USER role room");
+      io.to(`role:user`).emit("new_notification", notification);
+      io.to(`role:user`).emit("newNotification", notification);
+      
+      // Log detailed debug information
+      console.log("Broadcasting notification to user role:");
+      console.log("Event names: newNotification, new_notification");
+      console.log(`Active user sockets: ${io.sockets.adapter.rooms.get('role:user')?.size || 0}`);
+    }
+    
+    // Phát sự kiện âm thanh
+    console.log("Emitting sound notification event");
     io.emit("playNotificationSound");
-    console.log("Notification and sound emitted");
+    
+    console.log(`Notification emitted to ${recipientRole}`);
+    console.log("==== END NOTIFICATION DEBUG ====");
   } else {
     console.error("Socket.IO server not initialized");
   }

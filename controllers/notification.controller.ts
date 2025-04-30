@@ -4,6 +4,9 @@ import { CatchAsyncError } from "../middleware/catchAsyncErrors";
 import ErrorHandler from "../utils/ErrorHandler";
 import cron from "node-cron";
 import { redis } from "../utils/redis";
+import MentorModel from "../models/mentor.model";
+import { emitNotification, sendDirectMessage } from "../socketServer";
+
 
 // Lấy tất cả thông báo (dành cho admin)
 export const getNotifications = CatchAsyncError(
@@ -41,6 +44,7 @@ export const getUserNotifications = CatchAsyncError(
         ]
       }).sort({ createdAt: -1 });
 
+      console.log("NOtifications:"+notifications)
       res.status(200).json({
         success: true,
         notifications,
@@ -60,12 +64,17 @@ export const getMentorNotifications = CatchAsyncError(
         return next(new ErrorHandler("Vui lòng đăng nhập", 401));
       }
 
+      // Tìm mentorId tương ứng với userId này
+      const mentor = await MentorModel.findOne({ user: userId });
+      const mentorId = mentor?._id;
+
       // Lấy thông báo cho mentor cụ thể hoặc cho tất cả mentor
       const notifications = await NotificationModel.find({
         $or: [
-          { userId: userId, recipientRole: "mentor" },
-          { recipientRole: "mentor", userId: { $exists: false } },
-          { recipientRole: "all" }
+          { userId: userId, recipientRole: "mentor" }, // Tìm theo userId
+          { userId: mentorId, recipientRole: "mentor" }, // Tìm theo mentorId
+          { recipientRole: "mentor", userId: { $exists: false } }, // Thông báo cho tất cả mentor
+          { recipientRole: "all" } // Thông báo cho tất cả
         ]
       }).sort({ createdAt: -1 });
 
@@ -142,12 +151,29 @@ export const createNotification = async (data: {
   link?: string;
 }) => {
   try {
-    await NotificationModel.create(data);
+    const notification = await NotificationModel.create(data);
+    
+    // Gửi thông báo realtime qua socket
+    console.log(`Emitting notification for role: ${data.recipientRole}, userId: ${data.userId || 'all'}`);
+    
+    // Nếu có userId cụ thể, gửi thông báo trực tiếp cho user đó
+    if (data.userId) {
+      sendDirectMessage(data.userId, "new_notification", notification);
+    } 
+    // Nếu là thông báo cho tất cả người dùng thuộc role
+    else {
+      emitNotification({
+        ...notification.toObject(),
+        recipientRole: data.recipientRole
+      });
+    }
     
     // Clear cache nếu cần thiết
     if (data.userId) {
       await redis.del(`notifications-${data.userId}`);
     }
+    
+    return notification;
   } catch (error: any) {
     console.log("Lỗi khi tạo thông báo:", error.message);
   }
