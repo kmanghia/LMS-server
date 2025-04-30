@@ -5,7 +5,7 @@ import ErrorHandler from "../utils/ErrorHandler";
 import cron from "node-cron";
 import { redis } from "../utils/redis";
 import MentorModel from "../models/mentor.model";
-import { emitNotification, sendDirectMessage } from "../socketServer";
+import { emitNotification, sendDirectMessage, sendMobileNotification } from "../socketServer";
 
 
 // Lấy tất cả thông báo (dành cho admin)
@@ -158,11 +158,20 @@ export const createNotification = async (data: {
     
     // Nếu có userId cụ thể, gửi thông báo trực tiếp cho user đó
     if (data.userId) {
+      // Send using both event names for compatibility
+      sendDirectMessage(data.userId, "newNotification", notification);
       sendDirectMessage(data.userId, "new_notification", notification);
     } 
     // Nếu là thông báo cho tất cả người dùng thuộc role
     else {
+      // Send to all via standard emitNotification function
       emitNotification({
+        ...notification.toObject(),
+        recipientRole: data.recipientRole
+      });
+      
+      // Also specifically send to mobile clients to ensure they receive it
+      sendMobileNotification({
         ...notification.toObject(),
         recipientRole: data.recipientRole
       });

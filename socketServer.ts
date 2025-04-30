@@ -53,6 +53,12 @@ export const initSocketServer = (server: http.Server) => {
           console.log(`Added to role room: ${userRole}`);
         }
         
+        // For mobile devices, add to mobile room for targeted notifications
+        if (clientType === 'mobile') {
+          socket.join('client:mobile');
+          console.log(`Added to mobile clients room`);
+        }
+        
         // Kiểm tra xem userId đã tồn tại trong map chưa
         if (!connectedUsers.has(userId)) {
           connectedUsers.set(userId, new Map());
@@ -286,6 +292,7 @@ export const emitNotification = (notification: any) => {
       console.log("Broadcasting notification to user role:");
       console.log("Event names: newNotification, new_notification");
       console.log(`Active user sockets: ${io.sockets.adapter.rooms.get('role:user')?.size || 0}`);
+      console.log(`Active mobile clients: ${io.sockets.adapter.rooms.get('client:mobile')?.size || 0}`);
     }
     
     // Phát sự kiện âm thanh
@@ -323,4 +330,15 @@ export const getChatParticipants = async (chatId: string): Promise<string[]> => 
     console.error("Error getting chat participants:", error);
     return [];
   }
+};
+
+// Add helper method to send notifications specifically to mobile clients
+export const sendMobileNotification = (notification: any) => {
+  if (io) {
+    console.log("Sending notification specifically to mobile clients");
+    io.to('client:mobile').emit("newNotification", notification);
+    io.to('client:mobile').emit("new_notification", notification);
+    return true;
+  }
+  return false;
 };

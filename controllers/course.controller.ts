@@ -363,10 +363,18 @@ export const editCourse = CatchAsyncError(
 
       // Send notifications to users who purchased this course about the update
       try {
-        // Find all users who purchased this course
+        // Chuyển courseId từ string sang ObjectId
+        const courseObjectId = new mongoose.Types.ObjectId(courseId);
+        
+        console.log("[DEBUG] Course ID:", courseId);
+        console.log("[DEBUG] Course ObjectID:", courseObjectId);
+        
+        // Tìm tất cả người dùng đã mua khóa học này dùng ObjectId
         const users = await userModel.find({
-          "courses.courseId": courseId
+          "courses": { $elemMatch: { $eq: courseObjectId } }
         });
+        
+        console.log("[DEBUG] Users found for course notification:", users.length, users.map(u => u.email || u._id));
 
         // Create notifications for all users who purchased the course
         if (users.length > 0) {
@@ -383,9 +391,58 @@ export const editCourse = CatchAsyncError(
             emitNotification(notification);
           }
           console.log(`Đã gửi thông báo cập nhật khóa học cho ${users.length} học viên`);
+        } else {
+          console.log("[DEBUG] Không tìm thấy người dùng nào đã mua khóa học này");
+          
+          // Thử với courseId dạng chuỗi
+          const stringUsers = await userModel.find({
+            "courses": { $elemMatch: { courseId: courseId } }
+          });
+          
+          console.log("[DEBUG] Users found with string courseId query:", stringUsers.length);
+          
+          if (stringUsers.length > 0) {
+            for (const user of stringUsers) {
+              const notification = await NotificationModel.create({
+                title: "Khóa học đã được cập nhật",
+                message: `Khóa học "${course?.name}" đã được cập nhật với nội dung mới.`,
+                userId: user._id.toString(),
+                recipientRole: "user",
+                courseId: courseId,
+                type: "update",
+                link: `/course/${courseId}`
+              });
+              emitNotification(notification);
+            }
+            console.log(`Đã gửi thông báo cập nhật khóa học cho ${stringUsers.length} học viên (query với string)`);
+          } else {
+            // Thử tìm với courseId trong cấu trúc progress
+            const progressUsers = await userModel.find({
+              "progress.courseId": courseId
+            });
+            
+            console.log("[DEBUG] Users found with progress query:", progressUsers.length);
+            
+            if (progressUsers.length > 0) {
+              for (const user of progressUsers) {
+                const notification = await NotificationModel.create({
+                  title: "Khóa học đã được cập nhật",
+                  message: `Khóa học "${course?.name}" đã được cập nhật với nội dung mới.`,
+                  userId: user._id.toString(),
+                  recipientRole: "user",
+                  courseId: courseId,
+                  type: "update",
+                  link: `/course/${courseId}`
+                });
+                emitNotification(notification);
+              }
+              console.log(`Đã gửi thông báo cập nhật khóa học cho ${progressUsers.length} học viên (query progress)`);
+            }
+          }
         }
       } catch (notificationError) {
         console.error("Lỗi khi gửi thông báo cập nhật khóa học:", notificationError);
+        console.error(notificationError);
       }
 
       res.status(201).json({
