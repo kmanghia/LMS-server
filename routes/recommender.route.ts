@@ -27,14 +27,102 @@ interface RecommendationResponse {
 }
 
 
-recommenderRouter.get("/recommendations", isAutheticated, async (req, res) => {
+recommenderRouter.get("/recommender/get-recommendations", isAutheticated, async (req, res) => {
   try {
     const userId = req.user?._id.toString();
-    const limit = req.query.limit || 5;
+    const limit = req.query.limit || 10;
     
     const response = await axios.get(`${RECOMMENDER_API_URL}/recommend/user/${userId}?limit=${limit}`);
     
-    res.status(200).json(response.data);
+    console.log(`[DEBUG] Raw AI recommendations:`, response.data);
+    
+    // Trích xuất ids hoặc tên khóa học từ kết quả AI
+    let recommendedCoursesData = [];
+    
+    if (response.data && response.data.recommendations) {
+      const data: RecommendationResponse = response.data;
+      
+      // Lấy IDs từ recommendation API
+      const recommendedIds = (data.recommendations || [])
+        .filter((course: RecommendationItem) => course._id)
+        .map((course: RecommendationItem) => course._id as string);
+      
+      // Lấy tên khóa học để tìm kiếm backup nếu không có ID
+      const recommendedNames = (data.recommendations || [])
+        .filter((course: RecommendationItem) => course.name)
+        .map((course: RecommendationItem) => course.name as string);
+      
+      console.log(`[DEBUG] Extracted IDs:`, recommendedIds);
+      console.log(`[DEBUG] Extracted Names:`, recommendedNames);
+      
+      // Lấy khóa học đầy đủ từ database
+      if (recommendedIds.length > 0) {
+        try {
+          // Chuyển đổi strings thành ObjectIds nếu cần
+          const objectIds = recommendedIds.map((id: string) => {
+            try {
+              return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id;
+            } catch (e) {
+              return id;
+            }
+          });
+          
+          // Tìm khóa học theo IDs
+          recommendedCoursesData = await CourseModel.find({ 
+            _id: { $in: objectIds },
+            status: "active"
+          }).select("-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links");
+          
+          console.log(`[DEBUG] Found ${recommendedCoursesData.length} courses by IDs`);
+        } catch (idError) {
+          console.error("[DEBUG] Error finding courses by IDs:", idError);
+        }
+      }
+      
+      // Nếu không tìm thấy đủ khóa học theo ID, tìm theo tên
+      if (recommendedCoursesData.length < recommendedNames.length) {
+        try {
+          const nameQueries = recommendedNames.map((name: string) => ({
+            name: { $regex: name, $options: "i" }
+          }));
+          
+          if (nameQueries.length > 0) {
+            const coursesByName = await CourseModel.find({ 
+              $or: nameQueries,
+              status: "active"
+            }).select("-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links");
+            
+            // Lọc ra các khóa học không trùng với kết quả trước
+            const existingIds = recommendedCoursesData.map(c => c._id.toString());
+            const newCourses = coursesByName.filter(c => !existingIds.includes(c._id.toString()));
+            
+            recommendedCoursesData = [...recommendedCoursesData, ...newCourses];
+            console.log(`[DEBUG] Added ${newCourses.length} courses by name`);
+          }
+        } catch (nameError) {
+          console.error("[DEBUG] Error finding courses by names:", nameError);
+        }
+      }
+    }
+    
+    // Nếu không tìm được khóa học theo đề xuất, lấy các khóa học phổ biến
+    if (recommendedCoursesData.length === 0) {
+      console.log(`[DEBUG] Fallback to popular courses`);
+      recommendedCoursesData = await CourseModel.find({ status: "active" })
+        .sort({ ratings: -1, purchased: -1 })
+        .limit(Number(limit))
+        .select("-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links");
+    }
+    
+    // Giới hạn số lượng kết quả
+    recommendedCoursesData = recommendedCoursesData.slice(0, Number(limit));
+    
+    console.log(`[DEBUG] Final result: ${recommendedCoursesData.length} courses`);
+    
+    res.status(200).json({
+      success: true,
+      recommendedCourses: recommendedCoursesData
+    });
   } catch (error) {
     console.error("Error fetching recommendations:", error);
     res.status(500).json({ success: false, message: "Failed to fetch recommendations" });
