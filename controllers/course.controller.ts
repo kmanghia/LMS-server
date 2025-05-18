@@ -1189,5 +1189,52 @@ export const getPendingCourses = CatchAsyncError(
   }
 );
 
+// Toggle pinned status of a question
+export const togglePinQuestion = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { courseId, contentId, questionId } = req.body;
+
+      const course = await CourseModel.findById(courseId);
+
+      if (!mongoose.Types.ObjectId.isValid(contentId)) {
+        return next(new ErrorHandler("Id nội dung không hợp lệ", 400));
+      }
+
+      const courseContent = course?.courseData?.find((item: any) =>
+        item._id.equals(contentId)
+      );
+
+      if (!courseContent) {
+        return next(new ErrorHandler("Id nội dung không hợp lệ", 400));
+      }
+
+      const question = courseContent.questions?.find((item: any) =>
+        item._id.equals(questionId)
+      );
+
+      if (!question) {
+        return next(new ErrorHandler("ID câu hỏi không hợp lệ", 400));
+      }
+
+      // Toggle the isPinned status
+      question.isPinned = !question.isPinned;
+
+      await course?.save();
+
+      // Update Redis cache
+      await redis.set(courseId, JSON.stringify(course), "EX", 604800); // 7days
+
+      res.status(200).json({
+        success: true,
+        message: question.isPinned ? "Đã ghim câu hỏi" : "Đã bỏ ghim câu hỏi",
+        isPinned: question.isPinned
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
 
 
