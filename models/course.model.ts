@@ -5,6 +5,7 @@ export interface IComment extends Document {
   user: IUser;
   question: string;
   questionReplies: IComment[];
+  isPinned: boolean;
 }
 
 export interface IReview extends Document {
@@ -60,6 +61,7 @@ export interface ICourse extends Document {
   purchased: number;
   mentor: Schema.Types.ObjectId;
   status: string;
+  isFree: boolean;
 }
 
 const reviewSchema = new Schema<IReview>({
@@ -86,10 +88,14 @@ const iquizzSchema = new Schema<IQuizz>({
   correctAnswer: String, // Không bắt buộc
 });
 
-const commentSchema = new Schema<IComment>({
+const questionSchema = new Schema<IComment>({
   user: Object,
   question: String,
   questionReplies: [Object],
+  isPinned: {
+    type: Boolean,
+    default: false
+  },
 }, { timestamps: true });
 
 const courseDataSchema = new Schema<ICourseData>({
@@ -103,7 +109,7 @@ const courseDataSchema = new Schema<ICourseData>({
   links: [linkSchema],
   suggestion: String,
   iquizz: [iquizzSchema], // Không bắt buộc
-  questions: [commentSchema],
+  questions: [questionSchema],
 });
 
 export const courseSchema = new Schema<ICourse>({
@@ -163,6 +169,10 @@ export const courseSchema = new Schema<ICourse>({
     type: String,
     enum: ["draft", "pending", "active", "rejected"],
     default: "draft"
+  },
+  isFree: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 

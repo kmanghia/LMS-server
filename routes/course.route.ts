@@ -16,8 +16,10 @@ import {
   submitCourseForApproval,
   updateCourseStatus,
   getPendingCourses,
+  togglePinQuestion,
 } from "../controllers/course.controller";
 import { authorizeRoles, isAutheticated } from "../middleware/auth";
+import { updateAccessToken } from "../controllers/user.controller";
 const courseRouter = express.Router();
 
 courseRouter.post(
@@ -111,6 +113,13 @@ courseRouter.get(
   isAutheticated,
   authorizeRoles("admin"),
   getPendingCourses
+);
+
+courseRouter.put(
+  "/toggle-pin-question",
+  isAutheticated,
+  authorizeRoles("admin", "mentor"),
+  togglePinQuestion
 );
 
 export default courseRouter;
