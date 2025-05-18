@@ -509,7 +509,7 @@ export const getMentorStudents = CatchAsyncError(
             });
           }
         } catch (progressErr) {
-          console.error("Error finding progress students:", progressErr);
+          console.error("Error finding students via progress:", progressErr);
         }
       }
 
@@ -518,7 +518,93 @@ export const getMentorStudents = CatchAsyncError(
         students: uniqueStudents
       });
     } catch (error: any) {
-      console.error("Error in getMentorStudents:", error);
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
+// Lấy tiến độ học tập của học viên
+export const getMentorStudentsProgress = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?._id;
+      if (!userId) {
+        return next(new ErrorHandler("Vui lòng đăng nhập", 400));
+      }
+
+      // Tìm mentor ID từ user ID
+      const mentor = await MentorModel.findOne({ user: userId });
+      if (!mentor) {
+        return next(new ErrorHandler("Không tìm thấy thông tin mentor", 404));
+      }
+
+      // Lấy danh sách khóa học của mentor
+      const courses = await CourseModel.find({ mentor: mentor._id });
+      if (courses.length === 0) {
+        return res.status(200).json({
+          success: true,
+          studentsProgress: []
+        });
+      }
+
+      // Lấy IDs của các khóa học
+      const courseIds = courses.map(course => course._id.toString());
+      
+      // Tìm tất cả học viên đã mua khóa học của mentor
+      const OrderModel = mongoose.model('Order');
+      const orders = await OrderModel.find({ courseId: { $in: courseIds } });
+      
+      if (orders.length === 0) {
+        return res.status(200).json({
+          success: true,
+          studentsProgress: []
+        });
+      }
+      
+      // Lấy danh sách user IDs từ các đơn hàng
+      const userIds = [...new Set(orders.map(order => order.userId))];
+      
+      // Lấy thông tin chi tiết của các học viên kèm theo tiến độ học tập
+      const students = await userModel.find({ 
+        _id: { $in: userIds } 
+      }).select('_id name email avatar progress');
+      
+      // Tạo danh sách tiến độ học tập của học viên
+      const studentsProgress = students.map(student => {
+        // Lọc ra chỉ những tiến độ của khóa học thuộc mentor này
+        const courseProgress = (student.progress || [])
+          .filter((prog: any) => courseIds.includes(prog.courseId.toString()))
+          .map((prog: any) => {
+            const course = courses.find(c => c._id.toString() === prog.courseId.toString());
+            
+            // Tìm thông tin chi tiết về các chương đã hoàn thành
+            const completedChapters = prog.chapters ? prog.chapters.filter((chapter: any) => chapter.isCompleted).length : 0;
+            const totalChapters = course?.courseData?.length || 0;
+            
+            return {
+              courseId: prog.courseId,
+              courseName: course?.name || 'Unknown Course',
+              chapters: prog.chapters || [],
+              completedChapters,
+              totalChapters,
+              lastActivity: prog.lastActivity || null
+            };
+          });
+        
+        return {
+          _id: student._id,
+          name: student.name,
+          email: student.email,
+          avatar: student.avatar,
+          progress: courseProgress
+        };
+      });
+      
+      res.status(200).json({
+        success: true,
+        studentsProgress
+      });
+    } catch (error: any) {
       return next(new ErrorHandler(error.message, 500));
     }
   }

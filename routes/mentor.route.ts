@@ -10,6 +10,7 @@ import {
   getMentorCourses,
   getMentorById,
   getMentorStudents,
+  getMentorStudentsProgress,
   getMentorStudentsByMentorId
 } from "../controllers/mentor.controller";
 
@@ -38,6 +39,9 @@ router.get("/courses", isAutheticated, getMentorCourses);
 
 // Lấy danh sách học viên của mentor
 router.get("/students", isAutheticated, getMentorStudents);
+
+// Lấy tiến độ học tập của học viên
+router.get("/students-progress", isAutheticated, getMentorStudentsProgress);
 
 // Lấy danh sách học viên của mentor theo mentorId
 router.get("/students/:mentorId", getMentorStudentsByMentorId);
