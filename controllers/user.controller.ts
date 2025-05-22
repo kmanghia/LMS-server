@@ -131,6 +131,7 @@ export const activateUser = CatchAsyncError(
         name,
         email,
         password,
+        isVerified: true,
       });
 
       res.status(201).json({
@@ -477,10 +478,56 @@ export const markChapterAsCompletedOfUser = CatchAsyncError(
         chapterCourse.isCompleted = true;
       }
       await user?.save();
+
+      // Check if all chapters are completed
+      if (courseProgress) {
+        const allChaptersCompleted = courseProgress.chapters.every(chapter => chapter.isCompleted);
+        
+        if (allChaptersCompleted) {
+          try {
+            // Get course details to include in certificate
+            const course = await CourseModel.findById(courseId);
+            
+            if (!course) {
+              throw new Error("Course not found");
+            }
+            
+            let mentorName = "Unknown Instructor";
+            
+            // Get mentor information if it exists
+            if (course.mentor) {
+              const MentorModel = require("../models/mentor.model").default;
+              const mentor = await MentorModel.findById(course.mentor).populate("user", "name");
+              if (mentor && mentor.user) {
+                // Access name from the populated user field
+                mentorName = (mentor.user as any).name || "Unknown Instructor";
+              }
+            }
+            
+            // Create certificate record
+            const certificateData = {
+              userId: user?._id,
+              courseId: courseId,
+              userNameAtIssue: user?.name,
+              courseNameAtIssue: course.name,
+              mentorNameAtIssue: mentorName,
+              issueDate: new Date()
+            };
+
+            const CertificateModel = require("../models/certificate.model").default;
+            await CertificateModel.create(certificateData);
+   
+          } catch (certificateError: any) {
+            console.error("Error creating certificate:", certificateError.message);
+            // Don't throw the error - we still want to mark the chapter as completed
+          }
+        }
+      }
+
       res.status(200).json({
         success: true,
         response: chapterCourse
-      })
+      });
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 400));
     }
@@ -653,6 +700,83 @@ export const updateSingleNoteInNoteByCourseDataIdOfUser = CatchAsyncError(
         success: true,
         targetNotes
       })
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 400));
+    }
+  }
+)
+
+// Update user verification status
+export const updateUserVerificationStatus = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { userId, isVerified } = req.body;
+      
+      const user = await userModel.findById(userId);
+      if (!user) {
+        return next(new ErrorHandler("Không tìm thấy người dùng", 404));
+      }
+      
+      user.isVerified = isVerified;
+      await user.save();
+      
+      // Clear redis cache for this user
+      await redis.del(userId);
+      
+      res.status(200).json({
+        success: true,
+        message: isVerified ? "Kích hoạt người dùng thành công" : "Khóa người dùng thành công"
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 400));
+    }
+  }
+)
+
+// Get course completion progress
+export const getCourseCompletionProgress = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?._id;
+      const { courseId } = req.params;
+      
+      const user = await userModel.findById(userId);
+      if (!user) {
+        return next(new ErrorHandler("User not found", 404));
+      }
+      
+      const courseProgress = user.progress?.find(item => item.courseId.toString() === courseId);
+      
+      if (!courseProgress) {
+        return res.status(200).json({
+          success: true,
+          progress: 0,
+          isCompleted: false,
+          hasCertificate: false
+        });
+      }
+      
+      const totalChapters = courseProgress.chapters.length;
+      const completedChapters = courseProgress.chapters.filter(chapter => chapter.isCompleted).length;
+      const progressPercentage = totalChapters > 0 ? (completedChapters / totalChapters) : 0;
+      const isFullyCompleted = progressPercentage === 1;
+      
+      // Check if user has a certificate for this course
+      const CertificateModel = require("../models/certificate.model").default;
+      const certificate = await CertificateModel.findOne({
+        userId,
+        courseId
+      });
+      
+      res.status(200).json({
+        success: true,
+        progress: progressPercentage,
+        completedChapters,
+        totalChapters,
+        isCompleted: isFullyCompleted,
+        hasCertificate: !!certificate,
+        certificateId: certificate ? certificate._id : null
+      });
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 400));
     }
