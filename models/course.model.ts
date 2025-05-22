@@ -167,7 +167,7 @@ export const courseSchema = new Schema<ICourse>({
   },
   status: {
     type: String,
-    enum: ["draft", "pending", "active", "rejected"],
+    enum: ["draft", "pending", "active", "rejected", "locked"],
     default: "draft"
   },
   isFree: {
