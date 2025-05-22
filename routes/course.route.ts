@@ -17,6 +17,7 @@ import {
   updateCourseStatus,
   getPendingCourses,
   togglePinQuestion,
+  toggleCourseLockStatus,
 } from "../controllers/course.controller";
 import { authorizeRoles, isAutheticated } from "../middleware/auth";
 import { updateAccessToken } from "../controllers/user.controller";
@@ -120,6 +121,13 @@ courseRouter.put(
   isAutheticated,
   authorizeRoles("admin", "mentor"),
   togglePinQuestion
+);
+
+courseRouter.put(
+  "/toggle-lock",
+  isAutheticated,
+  authorizeRoles("admin"),
+  toggleCourseLockStatus
 );
 
 export default courseRouter;

@@ -1236,5 +1236,42 @@ export const togglePinQuestion = CatchAsyncError(
   }
 );
 
+// Toggle course lock status
+export const toggleCourseLockStatus = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { courseId } = req.body;
+      
+      const course = await CourseModel.findById(courseId);
+      
+      if (!course) {
+        return next(new ErrorHandler("Không tìm thấy khóa học", 404));
+      }
+      
+      // Toggle between active and locked status
+      if (course.status === "active") {
+        course.status = "locked";
+      } else if (course.status === "locked") {
+        course.status = "active";
+      } else {
+        return next(new ErrorHandler("Chỉ có thể khóa/mở khóa các khóa học đã được kích hoạt hoặc đã bị khóa", 400));
+      }
+      
+      await course.save();
+      
+      // Clear Redis cache
+      await redis.del(courseId);
+      
+      res.status(200).json({
+        success: true,
+        message: course.status === "locked" ? "Đã khóa khóa học thành công" : "Đã mở khóa học thành công",
+        status: course.status
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
+
 
 
