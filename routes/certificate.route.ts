@@ -3,7 +3,8 @@ import {
   getCertificateById, 
   getUserCertificates, 
   createCertificate, 
-  verifyCertificate 
+  verifyCertificate, 
+  getUserCertificatesForCourseByQuery
 } from "../controllers/certificate.controller";
 import { authorizeRoles, isAutheticated } from "../middleware/auth";
 
@@ -12,7 +13,7 @@ const router = express.Router();
 // User routes
 router.get("/get-user-certificates", isAutheticated, getUserCertificates);
 router.get("/get-certificate/:certificateId", isAutheticated, getCertificateById);
-
+router.get("/get-user-certificates-by-courseId/:courseId", isAutheticated, getUserCertificatesForCourseByQuery);
 // Admin routes
 router.post(
   "/create-certificate", 

@@ -6,6 +6,45 @@ import CourseModel from "../models/course.model";
 import userModel from "../models/user.model";
 import mongoose from "mongoose";
 
+
+export const getUserCertificatesForCourseByQuery = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user?._id;
+      const { courseId } = req.params; // Lấy courseId từ query params
+
+      if (!userId) {
+        return next(new ErrorHandler("User not authenticated", 401));
+      }
+
+      if (!courseId) {
+        return next(new ErrorHandler("Course ID query parameter is required", 400));
+      }
+
+     
+
+
+      const certificates = await CertificateModel.find({ userId, courseId })
+     
+
+      if (!certificates || certificates.length === 0) {
+        return next(
+          new ErrorHandler(
+            "No certificates found for this user and course",
+            404
+          )
+        );
+      }
+
+      res.status(200).json({
+        success: true,
+        certificates,
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
 // Get all certificates for a user
 export const getUserCertificates = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
