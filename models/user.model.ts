@@ -28,10 +28,9 @@ export interface IUser extends Document {
   progress?: Array<{
     courseId: string,
     chapters: Array<{
-
       chapterId: string,
-      isCompleted: boolean
-
+      isCompleted: boolean,
+      lastActivityAt?: Date
     }>
   }>;
   comparePassword: (password: string) => Promise<boolean>;
@@ -121,6 +120,10 @@ const userSchema: Schema<IUser> = new mongoose.Schema(
             isCompleted: {
               type: Boolean,
               default: false,
+            },
+            lastActivityAt: {
+              type: Date,
+              
             },
           },
         ],
